@@ -13,8 +13,12 @@ struct MenuBarIcon: View {
                     .stroke(Color.accentColor, lineWidth: 2)
                     .frame(width: 14, height: 14)
                     .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.5), value: appState.engine.overallProgress)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("DriveDock")
+        .accessibilityValue(appState.engine.isProcessing ? "Uploading \(Int(appState.engine.overallProgress * 100)) percent" : "Idle")
     }
 }
 
@@ -32,6 +36,7 @@ struct MenuBarPopoverView: View {
                     Text(appState.engine.overallProgress, format: .percent.precision(.fractionLength(0)))
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
+                        .animation(.easeInOut(duration: 0.3), value: appState.engine.overallProgress)
                 }
             }
 
@@ -75,12 +80,14 @@ struct MenuBarPopoverView: View {
                     } label: {
                         Label("Resume All", systemImage: "play.fill")
                     }
+                    .accessibilityLabel("Resume all uploads")
                 } else if appState.engine.isProcessing {
                     Button {
                         appState.engine.pauseAll()
                     } label: {
                         Label("Pause All", systemImage: "pause.fill")
                     }
+                    .accessibilityLabel("Pause all uploads")
                 }
 
                 Spacer()
@@ -95,6 +102,7 @@ struct MenuBarPopoverView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Open Main Window")
+                .accessibilityLabel("Open main window")
             }
 
             Divider()
@@ -105,6 +113,7 @@ struct MenuBarPopoverView: View {
             .buttonStyle(.plain)
             .font(.caption)
             .foregroundStyle(.secondary)
+            .accessibilityLabel("Quit DriveDock")
         }
         .padding()
         .frame(width: 240)
@@ -121,6 +130,7 @@ struct StatusRow: View {
             Circle()
                 .fill(color)
                 .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -129,5 +139,7 @@ struct StatusRow: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.primary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(count)")
     }
 }

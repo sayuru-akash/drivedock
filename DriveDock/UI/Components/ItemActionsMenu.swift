@@ -69,5 +69,7 @@ struct ItemActionsMenu: View {
         }
         .menuStyle(.borderlessButton)
         .frame(width: 20)
+        .accessibilityLabel("Actions for \(item.localFileName)")
+        .accessibilityHint("Opens a menu with actions for this upload item")
     }
 }

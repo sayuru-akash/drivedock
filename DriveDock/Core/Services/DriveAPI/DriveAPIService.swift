@@ -9,6 +9,7 @@ enum DriveAPIError: LocalizedError {
     case notFound
     case authenticationRequired
     case networkUnavailable
+    case timeout
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +21,7 @@ enum DriveAPIError: LocalizedError {
         case .notFound: return "File or folder not found"
         case .authenticationRequired: return "Authentication required"
         case .networkUnavailable: return "Network unavailable"
+        case .timeout: return "Request timed out"
         }
     }
 }
@@ -86,6 +88,10 @@ final class DriveAPIService {
     private let jsonDecoder: JSONDecoder
     private let jsonEncoder: JSONEncoder
 
+    var requestTimeout: TimeInterval = 30
+    var resourceTimeout: TimeInterval = 600
+    private let maxRetries = 3
+
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
@@ -97,6 +103,64 @@ final class DriveAPIService {
         jsonEncoder = JSONEncoder()
     }
 
+    func updateTimeouts(request: TimeInterval, resource: TimeInterval) {
+        requestTimeout = request
+        resourceTimeout = resource
+    }
+
+    private func executeWithRetry<T>(_ operation: () async throws -> T) async throws -> T {
+        var lastError: Error?
+        for attempt in 0..<maxRetries {
+            do {
+                return try await operation()
+            } catch let error as DriveAPIError {
+                switch error {
+                case .httpError(let code, _) where code >= 500:
+                    lastError = error
+                    if attempt < maxRetries - 1 {
+                        let delay = UInt64(pow(2.0, Double(attempt))) * 500_000_000
+                        try? await Task.sleep(nanoseconds: delay)
+                        continue
+                    }
+                case .rateLimited(let retryAfter):
+                    lastError = error
+                    if attempt < maxRetries - 1 {
+                        let delay = UInt64((retryAfter ?? Double(attempt + 1)) * 1_000_000_000)
+                        try? await Task.sleep(nanoseconds: delay)
+                        continue
+                    }
+                case .networkUnavailable:
+                    lastError = error
+                    if attempt < maxRetries - 1 {
+                        let delay = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
+                        try? await Task.sleep(nanoseconds: delay)
+                        continue
+                    }
+                default:
+                    throw error
+                }
+            } catch {
+                let nsError = error as NSError
+                if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
+                    lastError = DriveAPIError.timeout
+                    if attempt < maxRetries - 1 {
+                        let delay = UInt64(pow(2.0, Double(attempt))) * 500_000_000
+                        try? await Task.sleep(nanoseconds: delay)
+                        continue
+                    }
+                }
+                if nsError.domain == NSURLErrorDomain && attempt < maxRetries - 1 {
+                    lastError = error
+                    let delay = UInt64(pow(2.0, Double(attempt))) * 500_000_000
+                    try? await Task.sleep(nanoseconds: delay)
+                    continue
+                }
+                throw error
+            }
+        }
+        throw lastError ?? DriveAPIError.networkUnavailable
+    }
+
     // MARK: - Folder Operations
 
     func listFolder(
@@ -105,34 +169,114 @@ final class DriveAPIService {
         pageToken: String? = nil,
         pageSize: Int = 100
     ) async throws -> (folders: [DriveFolder], nextPageToken: String?) {
-        let accessToken = try await auth.getAccessToken(for: accountID)
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
 
-        var components = URLComponents(string: "\(baseURL)/files")!
-        var queryItems = [
-            URLQueryItem(name: "q", value: "'\(folderID)' in parents and trashed = false"),
-            URLQueryItem(name: "fields", value: "files(id,name,mimeType,parents,webViewLink,modifiedTime,capabilities),nextPageToken,incompleteSearch"),
-            URLQueryItem(name: "pageSize", value: "\(pageSize)"),
-            URLQueryItem(name: "supportsAllDrives", value: "true"),
-            URLQueryItem(name: "includeItemsFromAllDrives", value: "true")
-        ]
-        if let pageToken {
-            queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+            var components = URLComponents(string: "\(self.baseURL)/files")!
+            var queryItems = [
+                URLQueryItem(name: "q", value: "'\(folderID)' in parents and trashed = false"),
+                URLQueryItem(name: "fields", value: "files(id,name,mimeType,parents,webViewLink,modifiedTime,capabilities),nextPageToken,incompleteSearch"),
+                URLQueryItem(name: "pageSize", value: "\(pageSize)"),
+                URLQueryItem(name: "supportsAllDrives", value: "true"),
+                URLQueryItem(name: "includeItemsFromAllDrives", value: "true")
+            ]
+            if let pageToken {
+                queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+            }
+            components.queryItems = queryItems
+
+            guard let url = components.url else { throw DriveAPIError.invalidResponse }
+
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = self.requestTimeout
+
+            let (data, response) = try await self.session.data(for: request)
+            try self.validateResponse(response)
+
+            let listResponse = try self.jsonDecoder.decode(DriveAPIListResponse.self, from: data)
+
+            let folders = listResponse.files
+                .filter { $0.isFolder }
+                .map { apiFile in
+                    DriveFolder(
+                        id: apiFile.id,
+                        name: apiFile.name,
+                        parentID: apiFile.parents?.first,
+                        isSharedDrive: false,
+                        sharedDriveID: nil,
+                        ownerEmail: nil,
+                        modifiedDate: nil,
+                        childCount: nil
+                    )
+                }
+
+            return (folders, listResponse.nextPageToken)
         }
-        components.queryItems = queryItems
+    }
 
-        guard let url = components.url else { throw DriveAPIError.invalidResponse }
+    func listAllFolderPages(
+        folderID: String = "root",
+        accountID: String,
+        pageSize: Int = 100
+    ) async throws -> [DriveFolder] {
+        var allFolders: [DriveFolder] = []
+        var pageToken: String? = nil
 
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        repeat {
+            let result = try await listFolder(
+                folderID: folderID,
+                accountID: accountID,
+                pageToken: pageToken,
+                pageSize: pageSize
+            )
+            allFolders.append(contentsOf: result.folders)
+            pageToken = result.nextPageToken
+        } while pageToken != nil
 
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        return allFolders
+    }
 
-        let listResponse = try jsonDecoder.decode(DriveAPIListResponse.self, from: data)
+    func searchFolders(
+        query: String,
+        accountID: String,
+        pageToken: String? = nil
+    ) async throws -> (folders: [DriveFolder], nextPageToken: String?) {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return ([], nil)
+        }
 
-        let folders = listResponse.files
-            .filter { $0.isFolder }
-            .map { apiFile in
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
+
+            let sanitizedQuery = query.replacingOccurrences(of: "'", with: "\\'")
+            let searchQuery = "mimeType = 'application/vnd.google-apps.folder' and name contains '\(sanitizedQuery)' and trashed = false"
+
+            var components = URLComponents(string: "\(self.baseURL)/files")!
+            var queryItems = [
+                URLQueryItem(name: "q", value: searchQuery),
+                URLQueryItem(name: "fields", value: "files(id,name,mimeType,parents,webViewLink,modifiedTime),nextPageToken"),
+                URLQueryItem(name: "pageSize", value: "50"),
+                URLQueryItem(name: "supportsAllDrives", value: "true"),
+                URLQueryItem(name: "includeItemsFromAllDrives", value: "true")
+            ]
+            if let pageToken {
+                queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+            }
+            components.queryItems = queryItems
+
+            guard let url = components.url else { throw DriveAPIError.invalidResponse }
+
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = self.requestTimeout
+
+            let (data, response) = try await self.session.data(for: request)
+            try self.validateResponse(response)
+
+            let listResponse = try self.jsonDecoder.decode(DriveAPIListResponse.self, from: data)
+
+            let folders = listResponse.files.map { apiFile in
                 DriveFolder(
                     id: apiFile.id,
                     name: apiFile.name,
@@ -145,55 +289,8 @@ final class DriveAPIService {
                 )
             }
 
-        return (folders, listResponse.nextPageToken)
-    }
-
-    func searchFolders(
-        query: String,
-        accountID: String,
-        pageToken: String? = nil
-    ) async throws -> (folders: [DriveFolder], nextPageToken: String?) {
-        let accessToken = try await auth.getAccessToken(for: accountID)
-
-        let searchQuery = "mimeType = 'application/vnd.google-apps.folder' and name contains '\(query.replacingOccurrences(of: "'", with: "\\'"))' and trashed = false"
-
-        var components = URLComponents(string: "\(baseURL)/files")!
-        var queryItems = [
-            URLQueryItem(name: "q", value: searchQuery),
-            URLQueryItem(name: "fields", value: "files(id,name,mimeType,parents,webViewLink,modifiedTime),nextPageToken"),
-            URLQueryItem(name: "pageSize", value: "50"),
-            URLQueryItem(name: "supportsAllDrives", value: "true"),
-            URLQueryItem(name: "includeItemsFromAllDrives", value: "true")
-        ]
-        if let pageToken {
-            queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+            return (folders, listResponse.nextPageToken)
         }
-        components.queryItems = queryItems
-
-        guard let url = components.url else { throw DriveAPIError.invalidResponse }
-
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
-
-        let listResponse = try jsonDecoder.decode(DriveAPIListResponse.self, from: data)
-
-        let folders = listResponse.files.map { apiFile in
-            DriveFolder(
-                id: apiFile.id,
-                name: apiFile.name,
-                parentID: apiFile.parents?.first,
-                isSharedDrive: false,
-                sharedDriveID: nil,
-                ownerEmail: nil,
-                modifiedDate: nil,
-                childCount: nil
-            )
-        }
-
-        return (folders, listResponse.nextPageToken)
     }
 
     func createFolder(
@@ -342,7 +439,7 @@ final class DriveAPIService {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: metadata)
 
-        let (data, response) = try await session.data(for: request)
+        let (_, response) = try await session.data(for: request)
         try validateResponse(response)
 
         guard let httpResponse = response as? HTTPURLResponse,
@@ -386,6 +483,14 @@ final class DriveAPIService {
         } else {
             throw DriveAPIError.httpError(statusCode: httpResponse.statusCode, message: String(data: responseData, encoding: .utf8))
         }
+    }
+
+    func cancelResumableUpload(sessionURL: String) async throws {
+        guard let url = URL(string: sessionURL) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("0", forHTTPHeaderField: "Content-Length")
+        _ = try? await session.data(for: request)
     }
 
     func simpleUpload(
@@ -506,9 +611,18 @@ final class DriveAPIService {
 
     // MARK: - Validation
 
-    private func validateResponse(_ response: URLResponse) throws {
+    private func validateResponse(_ response: URLResponse, data: Data? = nil) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw DriveAPIError.invalidResponse
+        }
+
+        var errorMessage: String? = nil
+        if let data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let error = json["error"] as? [String: Any] {
+            errorMessage = error["message"] as? String
+            if let errors = error["errors"] as? [[String: Any]], let first = errors.first {
+                errorMessage = first["message"] as? String ?? errorMessage
+            }
         }
 
         switch httpResponse.statusCode {
@@ -517,6 +631,9 @@ final class DriveAPIService {
         case 401:
             throw DriveAPIError.authenticationRequired
         case 403:
+            if errorMessage?.contains("quota") == true || errorMessage?.contains("storage") == true {
+                throw DriveAPIError.quotaExceeded
+            }
             throw DriveAPIError.permissionDenied
         case 404:
             throw DriveAPIError.notFound
@@ -524,9 +641,13 @@ final class DriveAPIService {
             let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init)
             throw DriveAPIError.rateLimited(retryAfter: retryAfter)
         case 500...599:
-            throw DriveAPIError.httpError(statusCode: httpResponse.statusCode, message: "Server error")
+            throw DriveAPIError.httpError(statusCode: httpResponse.statusCode, message: errorMessage ?? "Server error")
         default:
-            throw DriveAPIError.httpError(statusCode: httpResponse.statusCode, message: nil)
+            throw DriveAPIError.httpError(statusCode: httpResponse.statusCode, message: errorMessage)
         }
+    }
+
+    private func validateResponse(_ response: URLResponse) throws {
+        try validateResponse(response, data: nil)
     }
 }

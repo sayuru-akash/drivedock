@@ -7,13 +7,13 @@ struct StatusBar: View {
         HStack(spacing: 16) {
             if appState.engine.isProcessing {
                 HStack(spacing: 4) {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 6, height: 6)
+                    PulsingDot(color: .green)
                     Text("Uploading")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Status: Uploading")
             } else if appState.engine.items.contains(where: { $0.status == .uploading || $0.status == .waiting }) {
                 HStack(spacing: 4) {
                     Circle()
@@ -23,6 +23,8 @@ struct StatusBar: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Status: Paused")
             } else {
                 HStack(spacing: 4) {
                     Circle()
@@ -32,6 +34,8 @@ struct StatusBar: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Status: Idle")
             }
 
             Divider()
@@ -40,11 +44,13 @@ struct StatusBar: View {
             Text("\(appState.engine.activeUploadCount) active")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("\(appState.engine.activeUploadCount) active uploads")
 
             if appState.engine.totalSpeed > 0 {
                 Text(ByteCountFormatter.string(fromByteCount: Int64(appState.engine.totalSpeed), countStyle: .file) + "/s")
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("Speed: \(ByteCountFormatter.string(fromByteCount: Int64(appState.engine.totalSpeed), countStyle: .file)) per second")
             }
 
             Spacer()
@@ -53,16 +59,19 @@ struct StatusBar: View {
                 Text("\(appState.engine.completedCount)/\(appState.engine.items.count) files")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("\(appState.engine.completedCount) of \(appState.engine.items.count) files completed")
 
                 if appState.engine.overallProgress > 0 {
                     Text(appState.engine.overallProgress, format: .percent.precision(.fractionLength(0)))
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel("Overall progress: \(Int(appState.engine.overallProgress * 100)) percent")
                 }
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.bar)
+        .accessibilityElement(children: .contain)
     }
 }

@@ -41,6 +41,8 @@ struct AccountSelectorButton: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Account selector")
+        .accessibilityHint("Choose a Google account for uploads")
         .popover(isPresented: $showAccountPopover) {
             AccountPopover()
                 .frame(width: 250)
@@ -65,6 +67,7 @@ struct AccountPopover: View {
                         Image(systemName: account.tokenStatus.systemImage)
                             .foregroundStyle(account.tokenStatus == .valid ? .green : .orange)
                             .font(.system(size: 12))
+                            .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 1) {
                             Text(account.displayName)
@@ -80,8 +83,9 @@ struct AccountPopover: View {
 
                         if appState.auth.activeAccount?.id == account.id {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.accentColor)
+                                .foregroundStyle(Color.accentColor)
                                 .font(.system(size: 12))
+                                .accessibilityLabel("Currently selected")
                         }
                     }
                     .padding(.vertical, 4)
@@ -89,6 +93,8 @@ struct AccountPopover: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("\(account.displayName), \(account.email)")
+                .accessibilityAddTraits(appState.auth.activeAccount?.id == account.id ? .isSelected : [])
             }
 
             Divider()
@@ -102,6 +108,7 @@ struct AccountPopover: View {
                     .font(.subheadline)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Add a new Google account")
         }
         .padding()
     }

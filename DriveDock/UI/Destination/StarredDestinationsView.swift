@@ -15,35 +15,13 @@ struct StarredDestinationsView: View {
                 }
             } else {
                 List(starred) { star in
-                    HStack(spacing: 12) {
-                        Image(systemName: "star.fill")
-                            .font(.title2)
-                            .foregroundStyle(.yellow)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(star.folderName)
-                                .font(.body)
-                            Text(star.starredDate.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        Button("Unstar") {
-                            appState.persistence.toggleStarred(star)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-
-                        Button("Upload Here") {
-                            startUpload(to: star)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                    StarredDestinationRow(star: star) {
+                        startUpload(to: star)
+                    } onUnstar: {
+                        appState.persistence.toggleStarred(star)
                     }
-                    .padding(.vertical, 4)
                 }
+                .animation(.easeInOut(duration: 0.2), value: starred.count)
             }
         }
     }
@@ -68,5 +46,57 @@ struct StarredDestinationsView: View {
                 appState.engine.startProcessing()
             }
         }
+    }
+}
+
+struct StarredDestinationRow: View {
+    let star: StarredDestination
+    let onUpload: () -> Void
+    let onUnstar: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "star.fill")
+                .font(.title2)
+                .foregroundStyle(.yellow)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(star.folderName)
+                    .font(.body)
+                Text(star.starredDate.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isHovering {
+                HStack(spacing: 8) {
+                    Button("Unstar") {
+                        onUnstar()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button("Upload Here") {
+                        onUpload()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(star.folderName), starred \(star.starredDate.formatted(date: .abbreviated, time: .shortened))")
     }
 }

@@ -7,6 +7,7 @@ struct StatusBadge: View {
         HStack(spacing: 4) {
             Image(systemName: status.systemImage)
                 .font(.system(size: 10))
+                .accessibilityHidden(true)
             Text(status.displayName)
                 .font(.caption2.weight(.medium))
         }
@@ -15,6 +16,9 @@ struct StatusBadge: View {
         .background(backgroundColor.opacity(0.15))
         .foregroundStyle(backgroundColor)
         .clipShape(Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(status.displayName)
+        .accessibilityAddTraits(.isStaticText)
     }
 
     private var backgroundColor: Color {

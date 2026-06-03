@@ -82,6 +82,7 @@ struct WelcomeStep: View {
     let onSkip: () -> Void
 
     @State private var isHovering = false
+    @State private var isPulsing = false
 
     var body: some View {
         VStack(spacing: 32) {
@@ -95,7 +96,13 @@ struct WelcomeStep: View {
                         startPoint: .top,
                         endPoint: .bottom
                     ))
-                    .symbolEffect(.pulse, options: .repeating)
+                    .scaleEffect(isPulsing ? 1.05 : 0.95)
+                    .animation(
+                        .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
+                        value: isPulsing
+                    )
+                    .onAppear { isPulsing = true }
+                    .accessibilityHidden(true)
 
                 Text("DriveDock")
                     .font(.system(size: 36, weight: .bold, design: .rounded))
@@ -121,6 +128,7 @@ struct WelcomeStep: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
+                .accessibilityLabel("Connect Google Drive account")
 
                 Button("Explore without account") {
                     onSkip()
@@ -128,6 +136,7 @@ struct WelcomeStep: View {
                 .buttonStyle(.plain)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("Explore DriveDock without connecting an account")
             }
             .padding(.bottom, 40)
         }
@@ -159,11 +168,14 @@ struct ConnectingStep: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Waiting for Google authorization. Complete the sign-in process in your browser.")
             } else if let error = authError {
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 40))
                         .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
 
                     Text("Connection Failed")
                         .font(.headline)
@@ -207,8 +219,13 @@ struct ReadyStep: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 64))
                     .foregroundStyle(.green)
-                    .symbolEffect(.bounce, value: isAnimating)
+                    .scaleEffect(isAnimating ? 1.1 : 0.9)
+                    .animation(
+                        .easeInOut(duration: 0.6).repeatForever(autoreverses: true),
+                        value: isAnimating
+                    )
                     .onAppear { isAnimating = true }
+                    .accessibilityHidden(true)
 
                 Text("You're All Set!")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -228,6 +245,7 @@ struct ReadyStep: View {
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
             .padding(.bottom, 40)
+            .accessibilityLabel("Start using DriveDock")
         }
         .padding(40)
     }

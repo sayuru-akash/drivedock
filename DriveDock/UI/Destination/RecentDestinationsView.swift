@@ -15,31 +15,11 @@ struct RecentDestinationsView: View {
                 }
             } else {
                 List(recents) { recent in
-                    HStack(spacing: 12) {
-                        Image(systemName: recent.isSharedDrive ? "person.2.fill" : "folder.fill")
-                            .font(.title2)
-                            .foregroundStyle(recent.isSharedDrive ? .purple : .accentColor)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(recent.folderName)
-                                .font(.body)
-                            Text(recent.lastUsedDate.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        Button {
-                            startUpload(to: recent)
-                        } label: {
-                            Text("Upload Here")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                    RecentDestinationRow(recent: recent) {
+                        startUpload(to: recent)
                     }
-                    .padding(.vertical, 4)
                 }
+                .animation(.easeInOut(duration: 0.2), value: recents.count)
             }
         }
     }
@@ -64,5 +44,50 @@ struct RecentDestinationsView: View {
                 appState.engine.startProcessing()
             }
         }
+    }
+}
+
+struct RecentDestinationRow: View {
+    let recent: RecentDestination
+    let onUpload: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: recent.isSharedDrive ? "person.2.fill" : "folder.fill")
+                .font(.title2)
+                .foregroundStyle(recent.isSharedDrive ? .purple : .accentColor)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(recent.folderName)
+                    .font(.body)
+                Text(recent.lastUsedDate.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isHovering {
+                Button {
+                    onUpload()
+                } label: {
+                    Text("Upload Here")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(recent.folderName), used \(recent.lastUsedDate.formatted(date: .abbreviated, time: .shortened))")
     }
 }

@@ -13,6 +13,7 @@ struct QueueToolbar: View {
                     .font(.body.weight(.medium))
             }
             .help("Add files")
+            .accessibilityLabel("Add files")
 
             Divider()
                 .frame(height: 16)
@@ -27,6 +28,8 @@ struct QueueToolbar: View {
                 Image(systemName: appState.engine.isProcessing ? "pause.fill" : "play.fill")
             }
             .help(appState.engine.isProcessing ? "Pause all" : "Resume all")
+            .accessibilityLabel(appState.engine.isProcessing ? "Pause all uploads" : "Resume all uploads")
+            .keyboardShortcut("p", modifiers: .command)
 
             Button {
                 appState.engine.clearCompleted()
@@ -34,6 +37,7 @@ struct QueueToolbar: View {
                 Image(systemName: "checkmark.circle")
             }
             .help("Clear completed")
+            .accessibilityLabel("Clear completed uploads")
             .disabled(appState.engine.completedCount == 0)
 
             Spacer()
@@ -41,11 +45,13 @@ struct QueueToolbar: View {
             Text("\(appState.engine.activeUploadCount) active")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("\(appState.engine.activeUploadCount) active uploads")
 
             if appState.engine.totalSpeed > 0 {
                 Text(ByteCountFormatter.string(fromByteCount: Int64(appState.engine.totalSpeed), countStyle: .file) + "/s")
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("Upload speed: \(ByteCountFormatter.string(fromByteCount: Int64(appState.engine.totalSpeed), countStyle: .file)) per second")
             }
         }
         .padding(.horizontal, 12)

@@ -49,6 +49,7 @@ struct DestinationPickerView: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Cancel destination selection")
             }
             .padding()
 
@@ -92,6 +93,7 @@ struct DestinationPickerView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
+                .accessibilityLabel("Use \(currentFolderName) as destination")
             }
             .padding()
         }
@@ -113,11 +115,13 @@ struct DestinationPickerView: View {
                     }
                     .buttonStyle(.plain)
                     .font(.caption)
+                    .accessibilityLabel("Navigate to My Drive")
 
                     ForEach(breadcrumb.indices, id: \.self) { index in
                         Image(systemName: "chevron.right")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         Button(breadcrumb[index].name) {
                             let target = breadcrumb[index]
                             breadcrumb = Array(breadcrumb.prefix(index))
@@ -125,6 +129,7 @@ struct DestinationPickerView: View {
                         }
                         .buttonStyle(.plain)
                         .font(.caption)
+                        .accessibilityLabel("Navigate to \(breadcrumb[index].name)")
                     }
                 }
                 .padding(.horizontal)
@@ -135,6 +140,7 @@ struct DestinationPickerView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 TextField("Search folders...", text: $searchText)
                     .textFieldStyle(.plain)
                     .onSubmit {
@@ -162,6 +168,7 @@ struct DestinationPickerView: View {
                     HStack {
                         Image(systemName: folder.isSharedDrive ? "person.2.fill" : "folder.fill")
                             .foregroundStyle(folder.isSharedDrive ? .purple : .accentColor)
+                            .accessibilityHidden(true)
 
                         Text(folder.name)
                             .lineLimit(1)
@@ -171,12 +178,16 @@ struct DestinationPickerView: View {
                         Image(systemName: "chevron.right")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
                         breadcrumb.append((id: currentFolderID, name: currentFolderName))
                         Task { await loadFolder(id: folder.id, name: folder.name) }
                     }
+                    .accessibilityLabel(folder.name)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Open this folder")
                 }
             }
 
@@ -189,6 +200,7 @@ struct DestinationPickerView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel("Create a new folder")
 
                 Spacer()
             }
@@ -221,6 +233,7 @@ struct DestinationPickerView: View {
                     HStack {
                         Image(systemName: recent.isSharedDrive ? "person.2.fill" : "folder.fill")
                             .foregroundStyle(recent.isSharedDrive ? .purple : .accentColor)
+                            .accessibilityHidden(true)
 
                         VStack(alignment: .leading) {
                             Text(recent.folderName)
@@ -246,6 +259,8 @@ struct DestinationPickerView: View {
                         onSelect(folder)
                         dismiss()
                     }
+                    .accessibilityLabel("\(recent.folderName), used \(recent.lastUsedDate.formatted(date: .abbreviated, time: .shortened))")
+                    .accessibilityAddTraits(.isButton)
                 }
             }
         }
@@ -268,6 +283,7 @@ struct DestinationPickerView: View {
                     HStack {
                         Image(systemName: "star.fill")
                             .foregroundStyle(.yellow)
+                            .accessibilityHidden(true)
 
                         Text(star.folderName)
 
@@ -288,6 +304,8 @@ struct DestinationPickerView: View {
                         onSelect(folder)
                         dismiss()
                     }
+                    .accessibilityLabel(star.folderName)
+                    .accessibilityAddTraits(.isButton)
                 }
             }
         }
@@ -383,6 +401,7 @@ struct SharedDrivesListView: View {
                     HStack {
                         Image(systemName: "person.2.fill")
                             .foregroundStyle(.purple)
+                            .accessibilityHidden(true)
                         Text(drive.name)
                         Spacer()
                     }
@@ -400,6 +419,8 @@ struct SharedDrivesListView: View {
                         )
                         onSelect(folder)
                     }
+                    .accessibilityLabel(drive.name)
+                    .accessibilityAddTraits(.isButton)
                 }
             }
         }

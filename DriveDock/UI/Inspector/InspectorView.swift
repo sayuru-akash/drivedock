@@ -33,6 +33,7 @@ struct ItemInspectorContent: View {
                         Image(systemName: item.isFolder ? "folder.fill" : fileIcon)
                             .font(.title2)
                             .foregroundStyle(item.isFolder ? Color.accentColor : Color.secondary)
+                            .accessibilityHidden(true)
                         Text(item.localFileName)
                             .font(.headline)
                             .lineLimit(2)
@@ -44,7 +45,7 @@ struct ItemInspectorContent: View {
                 Divider()
 
                 // Details
-                Group {
+                VStack(alignment: .leading, spacing: 8) {
                     DetailRow(label: "Size", value: item.formattedSize)
                     DetailRow(label: "Destination", value: item.destinationFolderName)
                     DetailRow(label: "Account", value: accountEmail)
@@ -53,14 +54,14 @@ struct ItemInspectorContent: View {
                         DetailRow(label: "Progress", value: "\(item.progressPercent)%")
                         DetailRow(label: "Uploaded", value: item.formattedUploaded)
                         DetailRow(label: "Speed", value: item.formattedSpeed)
-                        if let eta = item.eta {
-                            DetailRow(label: "ETA", value: eta.formatted(.units(width: .abbreviated)))
+                        if let eta = item.eta, eta > 0 {
+                            DetailRow(label: "ETA", value: formatETA(eta))
                         }
                     }
 
                     if item.status == .completed, let date = item.completedDate {
                         DetailRow(label: "Completed", value: date.formatted(date: .abbreviated, time: .shortened))
-                        if let link = item.driveFileLink {
+                        if item.driveFileLink != nil {
                             DetailRow(label: "Drive Link", value: "Available")
                         }
                     }
@@ -88,6 +89,8 @@ struct ItemInspectorContent: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Error: \(error)")
                 }
 
                 Divider()
@@ -151,6 +154,13 @@ struct ItemInspectorContent: View {
     private var accountEmail: String {
         appState.auth.accounts.first { $0.id == item.accountID }?.email ?? "Unknown"
     }
+
+    private func formatETA(_ interval: TimeInterval) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .abbreviated
+        return formatter.string(from: interval) ?? "—"
+    }
 }
 
 struct DetailRow: View {
@@ -167,6 +177,8 @@ struct DetailRow: View {
                 .font(.caption)
                 .lineLimit(3)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
     }
 }
 
@@ -180,6 +192,7 @@ struct ActionButton: View {
             HStack {
                 Image(systemName: icon)
                     .font(.system(size: 11))
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(.subheadline)
             }
@@ -188,5 +201,6 @@ struct ActionButton: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+        .accessibilityLabel(title)
     }
 }

@@ -190,6 +190,7 @@ struct AccountSettingsView: View {
                         HStack {
                             Image(systemName: account.tokenStatus.systemImage)
                                 .foregroundStyle(account.tokenStatus == .valid ? .green : .orange)
+                                .accessibilityHidden(true)
 
                             VStack(alignment: .leading) {
                                 Text(account.displayName)

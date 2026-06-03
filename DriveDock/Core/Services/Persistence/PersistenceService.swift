@@ -5,25 +5,43 @@ final class PersistenceService {
 
     private let defaults = UserDefaults.standard
     private let fileManager = FileManager.default
+    private let fileLock = NSLock()
 
     private var appSupportURL: URL {
         fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("DriveDock")
     }
 
+    private var backupURL: URL {
+        appSupportURL.appendingPathComponent("backups")
+    }
+
+    private let schemaVersionKey = "persistence.schemaVersion"
+    private let currentSchemaVersion = 1
+
     private init() {
         createAppSupportDirectoryIfNeeded()
+        migrateIfNeeded()
     }
 
     // MARK: - Queue
 
     func saveQueue(_ items: [UploadItem]) {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
         guard let data = try? JSONEncoder().encode(items) else { return }
         let url = appSupportURL.appendingPathComponent("queue.json")
+
+        guard hasSufficientDiskSpace(for: data.count) else { return }
+        createBackup(for: url)
         try? data.write(to: url)
     }
 
     func loadQueue() -> [UploadItem] {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
         let url = appSupportURL.appendingPathComponent("queue.json")
         guard let data = try? Data(contentsOf: url) else { return [] }
         return (try? JSONDecoder().decode([UploadItem].self, from: data)) ?? []
@@ -32,12 +50,21 @@ final class PersistenceService {
     // MARK: - Batches
 
     func saveBatches(_ batches: [UploadBatch]) {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
         guard let data = try? JSONEncoder().encode(batches) else { return }
         let url = appSupportURL.appendingPathComponent("batches.json")
+
+        guard hasSufficientDiskSpace(for: data.count) else { return }
+        createBackup(for: url)
         try? data.write(to: url)
     }
 
     func loadBatches() -> [UploadBatch] {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
         let url = appSupportURL.appendingPathComponent("batches.json")
         guard let data = try? Data(contentsOf: url) else { return [] }
         return (try? JSONDecoder().decode([UploadBatch].self, from: data)) ?? []
@@ -57,14 +84,23 @@ final class PersistenceService {
     }
 
     func loadHistory() -> [UploadHistoryEntry] {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
         let url = appSupportURL.appendingPathComponent("history.json")
         guard let data = try? Data(contentsOf: url) else { return [] }
         return (try? JSONDecoder().decode([UploadHistoryEntry].self, from: data)) ?? []
     }
 
     func saveHistory(_ entries: [UploadHistoryEntry]) {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
         guard let data = try? JSONEncoder().encode(entries) else { return }
         let url = appSupportURL.appendingPathComponent("history.json")
+
+        guard hasSufficientDiskSpace(for: data.count) else { return }
+        createBackup(for: url)
         try? data.write(to: url)
     }
 
@@ -76,7 +112,10 @@ final class PersistenceService {
     // MARK: - Recent Destinations
 
     func addRecentDestination(_ destination: RecentDestination) {
-        var recents = loadRecentDestinations()
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
+        var recents = loadRecentDestinationsInternal()
         recents.removeAll { $0.folderID == destination.folderID && $0.accountID == destination.accountID }
         recents.insert(destination, at: 0)
 
@@ -86,10 +125,17 @@ final class PersistenceService {
 
         guard let data = try? JSONEncoder().encode(recents) else { return }
         let url = appSupportURL.appendingPathComponent("recent_destinations.json")
+        guard hasSufficientDiskSpace(for: data.count) else { return }
         try? data.write(to: url)
     }
 
     func loadRecentDestinations() -> [RecentDestination] {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+        return loadRecentDestinationsInternal()
+    }
+
+    private func loadRecentDestinationsInternal() -> [RecentDestination] {
         let url = appSupportURL.appendingPathComponent("recent_destinations.json")
         guard let data = try? Data(contentsOf: url) else { return [] }
         return (try? JSONDecoder().decode([RecentDestination].self, from: data)) ?? []
@@ -98,7 +144,10 @@ final class PersistenceService {
     // MARK: - Starred Destinations
 
     func toggleStarred(_ destination: StarredDestination) {
-        var starred = loadStarredDestinations()
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
+        var starred = loadStarredDestinationsInternal()
         if starred.contains(where: { $0.folderID == destination.folderID }) {
             starred.removeAll { $0.folderID == destination.folderID }
         } else {
@@ -107,10 +156,17 @@ final class PersistenceService {
 
         guard let data = try? JSONEncoder().encode(starred) else { return }
         let url = appSupportURL.appendingPathComponent("starred_destinations.json")
+        guard hasSufficientDiskSpace(for: data.count) else { return }
         try? data.write(to: url)
     }
 
     func loadStarredDestinations() -> [StarredDestination] {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+        return loadStarredDestinationsInternal()
+    }
+
+    private func loadStarredDestinationsInternal() -> [StarredDestination] {
         let url = appSupportURL.appendingPathComponent("starred_destinations.json")
         guard let data = try? Data(contentsOf: url) else { return [] }
         return (try? JSONDecoder().decode([StarredDestination].self, from: data)) ?? []
@@ -200,12 +256,78 @@ final class PersistenceService {
     // MARK: - Cleanup
 
     func clearAllLocalData() {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
         try? fileManager.removeItem(at: appSupportURL)
         createAppSupportDirectoryIfNeeded()
     }
 
     private func createAppSupportDirectoryIfNeeded() {
         try? fileManager.createDirectory(at: appSupportURL, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: backupURL, withIntermediateDirectories: true)
+    }
+
+    // MARK: - Disk Space
+
+    private func hasSufficientDiskSpace(for bytes: Int) -> Bool {
+        guard let attrs = try? fileManager.attributesOfFileSystem(forPath: appSupportURL.path),
+              let freeSpace = attrs[.systemFreeSize] as? Int64 else {
+            return true
+        }
+        return freeSpace > Int64(bytes) + 10 * 1024 * 1024
+    }
+
+    // MARK: - Backup
+
+    private func createBackup(for fileURL: URL) {
+        guard fileManager.fileExists(atPath: fileURL.path) else { return }
+        let fileName = fileURL.lastPathComponent
+        let backupFileURL = backupURL.appendingPathComponent(fileName)
+        try? fileManager.removeItem(at: backupFileURL)
+        try? fileManager.copyItem(at: fileURL, to: backupFileURL)
+    }
+
+    func restoreBackup(for fileName: String) -> Bool {
+        let backupFileURL = backupURL.appendingPathComponent(fileName)
+        let targetURL = appSupportURL.appendingPathComponent(fileName)
+        guard fileManager.fileExists(atPath: backupFileURL.path) else { return false }
+        try? fileManager.removeItem(at: targetURL)
+        do {
+            try fileManager.copyItem(at: backupFileURL, to: targetURL)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    // MARK: - Migration
+
+    private func migrateIfNeeded() {
+        let savedVersion = defaults.integer(forKey: schemaVersionKey)
+        guard savedVersion < currentSchemaVersion else { return }
+
+        if savedVersion == 0 {
+            defaults.set(currentSchemaVersion, forKey: schemaVersionKey)
+        }
+    }
+
+    func validateDataIntegrity() -> (queueValid: Bool, batchesValid: Bool, historyValid: Bool) {
+        let queueURL = appSupportURL.appendingPathComponent("queue.json")
+        let batchesURL = appSupportURL.appendingPathComponent("batches.json")
+        let historyURL = appSupportURL.appendingPathComponent("history.json")
+
+        let queueValid = validateJSONFile(at: queueURL, type: [UploadItem].self)
+        let batchesValid = validateJSONFile(at: batchesURL, type: [UploadBatch].self)
+        let historyValid = validateJSONFile(at: historyURL, type: [UploadHistoryEntry].self)
+
+        return (queueValid, batchesValid, historyValid)
+    }
+
+    private func validateJSONFile<T: Decodable>(at url: URL, type: T.Type) -> Bool {
+        guard fileManager.fileExists(atPath: url.path) else { return true }
+        guard let data = try? Data(contentsOf: url) else { return false }
+        return (try? JSONDecoder().decode(type, from: data)) != nil
     }
 
     enum ExportFormat {

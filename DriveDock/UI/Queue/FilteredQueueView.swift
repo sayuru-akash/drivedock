@@ -22,8 +22,12 @@ struct FilteredQueueView: View {
             )) { item in
                 QueueItemRow(item: item)
                     .tag(item.id)
+                    .contextMenu {
+                        ItemContextMenu(item: item)
+                    }
             }
             .listStyle(.inset)
+            .animation(.easeInOut(duration: 0.2), value: filtered.count)
         }
     }
 

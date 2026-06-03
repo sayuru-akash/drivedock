@@ -26,12 +26,16 @@ struct ContentView: View {
                         } label: {
                             Image(systemName: "gearshape")
                         }
+                        .accessibilityLabel("Settings")
+                        .help("Open Settings")
 
                         Button {
                             appState.showInspector.toggle()
                         } label: {
                             Image(systemName: appState.showInspector ? "sidebar.right" : "sidebar.right")
                         }
+                        .accessibilityLabel(appState.showInspector ? "Hide Inspector" : "Show Inspector")
+                        .help(appState.showInspector ? "Hide Inspector" : "Show Inspector")
                     }
                 }
             }

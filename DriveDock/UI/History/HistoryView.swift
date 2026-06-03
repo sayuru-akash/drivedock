@@ -10,9 +10,17 @@ struct HistoryView: View {
         VStack(spacing: 0) {
             // Toolbar
             HStack {
-                TextField("Search history...", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 250)
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    TextField("Search history...", text: $searchText)
+                        .textFieldStyle(.plain)
+                }
+                .padding(6)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(6)
+                .frame(maxWidth: 250)
 
                 Spacer()
 
@@ -29,6 +37,7 @@ struct HistoryView: View {
                 }
                 .menuStyle(.borderedButton)
                 .controlSize(.small)
+                .accessibilityLabel("Export history")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -45,8 +54,23 @@ struct HistoryView: View {
             } else {
                 List(filteredHistory) { entry in
                     HistoryRow(entry: entry)
+                        .contextMenu {
+                            if let link = entry.driveFileLink {
+                                Button("Open in Drive") {
+                                    if let url = URL(string: link) {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                }
+
+                                Button("Copy Drive Link") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(link, forType: .string)
+                                }
+                            }
+                        }
                 }
                 .listStyle(.inset)
+                .animation(.easeInOut(duration: 0.2), value: filteredHistory.count)
             }
         }
         .onAppear {
@@ -78,12 +102,14 @@ struct HistoryView: View {
 
 struct HistoryRow: View {
     let entry: UploadHistoryEntry
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: entry.status == .completed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .foregroundStyle(entry.status == .completed ? .green : .red)
                 .font(.system(size: 16))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.fileName)
@@ -121,19 +147,42 @@ struct HistoryRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let link = entry.driveFileLink {
-                Button {
-                    if let url = URL(string: link) {
-                        NSWorkspace.shared.open(url)
+            if isHovering, let link = entry.driveFileLink {
+                HStack(spacing: 4) {
+                    Button {
+                        if let url = URL(string: link) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 14))
                     }
-                } label: {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 14))
+                    .buttonStyle(.borderless)
+                    .help("Open in Drive")
+                    .accessibilityLabel("Open in Google Drive")
+
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(link, forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Copy link")
+                    .accessibilityLabel("Copy Drive link")
                 }
-                .buttonStyle(.borderless)
-                .help("Open in Drive")
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
         .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(entry.fileName), \(entry.formattedSize), \(entry.status.displayName)")
     }
 }

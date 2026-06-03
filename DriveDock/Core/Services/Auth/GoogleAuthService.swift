@@ -51,6 +51,9 @@ final class GoogleAuthService {
     private(set) var authError: String?
 
     private var codeVerifier: String?
+    private var activeRefreshTasks: [String: Task<String, Error>] = [:]
+    private var userInfoCache: [String: (userInfo: OAuthUserInfo, cachedAt: Date)] = [:]
+    private let userInfoCacheTTL: TimeInterval = 3600
 
     private init() {
         self.clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String ?? ""
@@ -138,16 +141,25 @@ final class GoogleAuthService {
             throw AuthError.tokenDecodingFailed
         }
 
-        if let expiresAt = token.expiresAt, Date() < expiresAt.addingTimeInterval(-60) {
+        if let expiresAt = token.expiresAt, Date() < expiresAt.addingTimeInterval(-120) {
             return token.accessToken
         }
 
         guard let refreshToken = token.refreshToken else {
+            updateAccountStatus(accountID, status: .expired)
             throw AuthError.tokenExpired
         }
 
-        let newToken = try await refreshAccessToken(refreshToken: refreshToken, accountID: accountID)
-        return newToken
+        if let existingTask = activeRefreshTasks[accountID] {
+            return try await existingTask.value
+        }
+
+        let task = Task<String, Error> {
+            defer { activeRefreshTasks.removeValue(forKey: accountID) }
+            return try await refreshAccessTokenWithRetry(refreshToken: refreshToken, accountID: accountID)
+        }
+        activeRefreshTasks[accountID] = task
+        return try await task.value
     }
 
     func disconnectAccount(_ accountID: String) throws {
@@ -173,7 +185,61 @@ final class GoogleAuthService {
         }
     }
 
+    func isTokenValid(for accountID: String) -> Bool {
+        guard let tokenData = try? keychain.loadString(key: "token_\(accountID)"),
+              let data = tokenData.data(using: .utf8),
+              let token = try? JSONDecoder().decode(StoredToken.self, from: data),
+              let expiresAt = token.expiresAt else {
+            return false
+        }
+        return Date() < expiresAt.addingTimeInterval(-120)
+    }
+
+    func clearUserInfoCache(for accountID: String? = nil) {
+        if let accountID {
+            let tokenData = try? keychain.loadString(key: "token_\(accountID)")
+            if let data = tokenData?.data(using: .utf8),
+               let token = try? JSONDecoder().decode(StoredToken.self, from: data) {
+                let cacheKey = String(token.accessToken.prefix(32))
+                userInfoCache.removeValue(forKey: cacheKey)
+            }
+        } else {
+            userInfoCache.removeAll()
+        }
+    }
+
     // MARK: - Private Helpers
+
+    private func refreshAccessTokenWithRetry(refreshToken: String, accountID: String, maxRetries: Int = 3) async throws -> String {
+        var lastError: Error?
+        for attempt in 0..<maxRetries {
+            do {
+                return try await refreshAccessToken(refreshToken: refreshToken, accountID: accountID)
+            } catch {
+                lastError = error
+                if let authError = error as? AuthError {
+                    switch authError {
+                    case .tokenRefreshFailed:
+                        if attempt < maxRetries - 1 {
+                            let delay = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
+                            try? await Task.sleep(nanoseconds: delay)
+                            continue
+                        }
+                    default:
+                        throw error
+                    }
+                }
+                let nsError = error as NSError
+                if nsError.domain == NSURLErrorDomain && attempt < maxRetries - 1 {
+                    let delay = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
+                    try? await Task.sleep(nanoseconds: delay)
+                    continue
+                }
+                throw error
+            }
+        }
+        throw lastError ?? AuthError.tokenRefreshFailed
+    }
 
     private func exchangeCodeForTokens(code: String, codeVerifier: String) async throws -> OAuthTokenResponse {
         var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
@@ -232,8 +298,14 @@ final class GoogleAuthService {
     }
 
     private func fetchUserInfo(accessToken: String) async throws -> OAuthUserInfo {
+        let cacheKey = String(accessToken.prefix(32))
+        if let cached = userInfoCache[cacheKey], Date().timeIntervalSince(cached.cachedAt) < userInfoCacheTTL {
+            return cached.userInfo
+        }
+
         var request = URLRequest(url: URL(string: "https://www.googleapis.com/oauth2/v2/userinfo")!)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -241,7 +313,9 @@ final class GoogleAuthService {
             throw AuthError.userInfoFailed
         }
 
-        return try JSONDecoder().decode(OAuthUserInfo.self, from: data)
+        let userInfo = try JSONDecoder().decode(OAuthUserInfo.self, from: data)
+        userInfoCache[cacheKey] = (userInfo: userInfo, cachedAt: Date())
+        return userInfo
     }
 
     private func saveTokens(accountID: String, response: OAuthTokenResponse) throws {

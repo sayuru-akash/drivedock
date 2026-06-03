@@ -18,31 +18,9 @@ struct SharedDrivesView: View {
                 }
             } else {
                 List(sharedDrives) { drive in
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.2.fill")
-                            .font(.title2)
-                            .foregroundStyle(.purple)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(drive.name)
-                                .font(.body)
-                            if let date = drive.createdDate {
-                                Text("Created \(date.formatted(date: .abbreviated, time: .omitted))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        Spacer()
-
-                        Button("Browse") {
-                            // TODO: Navigate to shared drive
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                    .padding(.vertical, 4)
+                    SharedDriveRow(drive: drive)
                 }
+                .animation(.easeInOut(duration: 0.2), value: sharedDrives.count)
             }
         }
         .task {
@@ -59,5 +37,49 @@ struct SharedDrivesView: View {
             // Silently fail
         }
         isLoading = false
+    }
+}
+
+struct SharedDriveRow: View {
+    let drive: SharedDrive
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.2.fill")
+                .font(.title2)
+                .foregroundStyle(.purple)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(drive.name)
+                    .font(.body)
+                if let date = drive.createdDate {
+                    Text("Created \(date.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            if isHovering {
+                Button("Browse") {
+                    // TODO: Navigate to shared drive
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(drive.name), Shared Drive")
     }
 }

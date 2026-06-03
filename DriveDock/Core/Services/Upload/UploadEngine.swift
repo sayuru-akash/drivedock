@@ -7,6 +7,8 @@ enum UploadEngineError: LocalizedError {
     case sessionExpired
     case fileReadError
     case uploadFailed(String)
+    case fileSizeChanged(expected: Int64, actual: Int64)
+    case bandwidthLimitExceeded
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +17,9 @@ enum UploadEngineError: LocalizedError {
         case .sessionExpired: return "Upload session expired"
         case .fileReadError: return "Could not read the file"
         case .uploadFailed(let msg): return "Upload failed: \(msg)"
+        case .fileSizeChanged(let expected, let actual):
+            return "File changed during upload (expected \(ByteCountFormatter.string(fromByteCount: expected, countStyle: .file)), now \(ByteCountFormatter.string(fromByteCount: actual, countStyle: .file)))"
+        case .bandwidthLimitExceeded: return "Bandwidth limit exceeded"
         }
     }
 }
@@ -268,12 +273,19 @@ final class UploadEngine {
     }
 
     func cancelItem(_ itemID: String) {
+        let sessionURL = items.first(where: { $0.id == itemID })?.resumableSessionURL
         activeTasks[itemID]?.cancel()
         activeTasks.removeValue(forKey: itemID)
 
         if let index = items.firstIndex(where: { $0.id == itemID }) {
             items[index].status = .cancelled
             items[index].speed = 0
+        }
+
+        if let sessionURL {
+            Task {
+                try? await driveAPI.cancelResumableUpload(sessionURL: sessionURL)
+            }
         }
 
         activeUploadCount = max(0, activeUploadCount - 1)
@@ -322,6 +334,25 @@ final class UploadEngine {
         persistence.saveQueue(items)
     }
 
+    func moveItemToBack(_ itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        let item = items.remove(at: index)
+        items.append(item)
+        persistence.saveQueue(items)
+    }
+
+    func moveItemUp(_ itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }), index > 0 else { return }
+        items.swapAt(index, index - 1)
+        persistence.saveQueue(items)
+    }
+
+    func moveItemDown(_ itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }), index < items.count - 1 else { return }
+        items.swapAt(index, index + 1)
+        persistence.saveQueue(items)
+    }
+
     // MARK: - Queue Processing
 
     private func processQueue() {
@@ -345,9 +376,14 @@ final class UploadEngine {
 
                     if !hasWaiting && !hasActive {
                         isProcessing = false
-                        notifications.sendBatchCompleteNotification(
+                        let batchIDs = Set(self.items.compactMap { $0.batchID })
+                        for batchID in batchIDs {
+                            self.notifications.clearNotificationsForBatch(batchID)
+                        }
+                        self.notifications.sendBatchCompleteNotification(
                             completedCount: items.filter { $0.status == .completed }.count,
-                            failedCount: items.filter { $0.status == .failed }.count
+                            failedCount: items.filter { $0.status == .failed }.count,
+                            batchID: nil
                         )
                     } else if !hasWaiting && hasActive {
                         try? await Task.sleep(nanoseconds: 500_000_000)
@@ -451,7 +487,9 @@ final class UploadEngine {
                 if !errorCategory.isRetryable {
                     self.notifications.sendUploadFailedNotification(
                         fileName: self.items[index].localFileName,
-                        reason: errorCategory.displayName
+                        reason: errorCategory.displayName,
+                        batchID: self.items[index].batchID,
+                        driveFileLink: self.items[index].driveFileLink
                     )
                 }
             }
@@ -494,36 +532,83 @@ final class UploadEngine {
         }
 
         var uploadedBytes: Int64 = 0
-        let handle = try FileHandle(forReadingFrom: fileURL)
+        let handle: FileHandle
+        do {
+            handle = try FileHandle(forReadingFrom: fileURL)
+        } catch {
+            throw UploadEngineError.fileReadError
+        }
         defer { try? handle.close() }
 
         while uploadedBytes < item.fileSize {
-            if Task.isCancelled { throw CancellationError() }
+            if Task.isCancelled {
+                try? await driveAPI.cancelResumableUpload(sessionURL: session.uploadURL)
+                throw CancellationError()
+            }
+
+            let fileAttrs = try? FileManager.default.attributesOfItem(atPath: item.localFilePath)
+            let currentFileSize = fileAttrs?[.size] as? Int64 ?? item.fileSize
+            if currentFileSize != item.fileSize {
+                throw UploadEngineError.fileSizeChanged(expected: item.fileSize, actual: currentFileSize)
+            }
 
             let remaining = item.fileSize - uploadedBytes
             let currentChunkSize = min(Int64(chunkSize), remaining)
 
             handle.seek(toFileOffset: UInt64(uploadedBytes))
-            guard let chunkData = try handle.read(upToCount: Int(currentChunkSize)) else {
+            let chunkData: Data
+            do {
+                guard let data = try handle.read(upToCount: Int(currentChunkSize)) else {
+                    throw UploadEngineError.fileReadError
+                }
+                chunkData = data
+            } catch let error as UploadEngineError {
+                throw error
+            } catch {
                 throw UploadEngineError.fileReadError
             }
 
-            let result = try await driveAPI.uploadChunk(
-                sessionURL: session.uploadURL,
-                data: chunkData,
-                rangeStart: uploadedBytes,
-                totalSize: item.fileSize
-            )
+            let bandwidthLimit = AppSettings.shared.bandwidthLimitKBps
+            if bandwidthLimit > 0 {
+                let limitBytesPerSecond = Double(bandwidthLimit) * 1024.0
+                let chunkBytes = Double(chunkData.count)
+                let minDuration = chunkBytes / limitBytesPerSecond
+                let elapsed = speedTrackers[itemID]?.currentWindowElapsed ?? 0
+                if elapsed < minDuration {
+                    let sleepNanoseconds = UInt64((minDuration - elapsed) * 1_000_000_000)
+                    if sleepNanoseconds > 0 {
+                        try? await Task.sleep(nanoseconds: sleepNanoseconds)
+                    }
+                }
+            }
+
+            let result: (statusCode: Int, uploadedBytes: Int64)
+            do {
+                result = try await driveAPI.uploadChunk(
+                    sessionURL: session.uploadURL,
+                    data: chunkData,
+                    rangeStart: uploadedBytes,
+                    totalSize: item.fileSize
+                )
+            } catch {
+                if Task.isCancelled {
+                    try? await driveAPI.cancelResumableUpload(sessionURL: session.uploadURL)
+                    throw CancellationError()
+                }
+                throw error
+            }
 
             uploadedBytes = result.uploadedBytes
 
             let speed = speedTrackers[itemID]?.addBytes(Int64(chunkData.count)) ?? 0
             let remainingBytes = item.fileSize - uploadedBytes
             let eta = speed > 0 ? Double(remainingBytes) / speed : nil
+            let currentUploaded = uploadedBytes
+            let fileSize = item.fileSize
 
             await MainActor.run {
-                self.items[index].uploadedBytes = uploadedBytes
-                self.items[index].progress = Double(uploadedBytes) / Double(item.fileSize)
+                self.items[index].uploadedBytes = currentUploaded
+                self.items[index].progress = Double(currentUploaded) / Double(fileSize)
                 self.items[index].speed = speed
                 self.items[index].eta = eta
                 self.items[index].lastActivityDate = Date()
@@ -561,8 +646,20 @@ final class UploadEngine {
             }
         }
 
+        if let uploadError = error as? UploadEngineError {
+            switch uploadError {
+            case .fileSizeChanged: return .fileChanged
+            case .fileReadError: return .localFileMissing
+            default: break
+            }
+        }
+
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain {
+            return .network
+        }
+
+        if error is CancellationError {
             return .network
         }
 
@@ -627,6 +724,11 @@ final class UploadEngine {
 final class SpeedTracker {
     private var bytesPerSecond: [Date: Int64] = [:]
     private let windowDuration: TimeInterval = 5
+
+    var currentWindowElapsed: TimeInterval {
+        guard let earliest = bytesPerSecond.keys.min() else { return 0 }
+        return Date().timeIntervalSince(earliest)
+    }
 
     func addBytes(_ bytes: Int64) -> Double {
         let now = Date()

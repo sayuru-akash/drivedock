@@ -23,6 +23,7 @@ struct DetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeInOut(duration: 0.2), value: appState.selectedSidebarItem)
     }
 
     private var statusFilter: UploadItemStatus? {
