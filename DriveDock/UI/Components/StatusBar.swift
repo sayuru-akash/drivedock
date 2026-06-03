@@ -72,6 +72,7 @@ struct StatusBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.bar)
+        .lineLimit(1)
         .accessibilityElement(children: .contain)
     }
 }

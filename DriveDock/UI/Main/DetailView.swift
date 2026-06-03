@@ -10,12 +10,18 @@ struct DetailView: View {
                 UploadsOverviewView()
             case .queue, .active, .completed, .failed, .paused:
                 FilteredQueueView(statusFilter: statusFilter)
+            case .myDrive:
+                DriveBrowserView()
+            case .sharedDrives:
+                DriveBrowserView()
+            case .recentFiles:
+                DriveBrowserView()
+            case .starredFiles:
+                DriveBrowserView()
             case .recentDestinations:
                 RecentDestinationsView()
             case .starredDestinations:
                 StarredDestinationsView()
-            case .sharedDrives:
-                SharedDrivesView()
             case .history:
                 HistoryView()
             case .settings:
@@ -23,7 +29,6 @@ struct DetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.easeInOut(duration: 0.2), value: appState.selectedSidebarItem)
     }
 
     private var statusFilter: UploadItemStatus? {

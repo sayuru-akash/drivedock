@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var selectedTab: SettingsTab = .general
 
     enum SettingsTab: String, CaseIterable {
@@ -36,44 +37,62 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            GeneralSettingsView()
-                .tabItem {
-                    Label(SettingsTab.general.displayName, systemImage: SettingsTab.general.systemImage)
+        VStack(spacing: 0) {
+            // Top bar with close button
+            HStack {
+                Text("Settings")
+                    .font(.headline)
+                Spacer()
+                Button("Done") {
+                    dismiss()
                 }
-                .tag(SettingsTab.general)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
 
-            UploadSettingsView()
-                .tabItem {
-                    Label(SettingsTab.uploads.displayName, systemImage: SettingsTab.uploads.systemImage)
-                }
-                .tag(SettingsTab.uploads)
+            TabView(selection: $selectedTab) {
+                GeneralSettingsView()
+                    .tabItem {
+                        Label(SettingsTab.general.displayName, systemImage: SettingsTab.general.systemImage)
+                    }
+                    .tag(SettingsTab.general)
 
-            AccountSettingsView()
-                .tabItem {
-                    Label(SettingsTab.accounts.displayName, systemImage: SettingsTab.accounts.systemImage)
-                }
-                .tag(SettingsTab.accounts)
+                UploadSettingsView()
+                    .tabItem {
+                        Label(SettingsTab.uploads.displayName, systemImage: SettingsTab.uploads.systemImage)
+                    }
+                    .tag(SettingsTab.uploads)
 
-            NetworkSettingsView()
-                .tabItem {
-                    Label(SettingsTab.network.displayName, systemImage: SettingsTab.network.systemImage)
-                }
-                .tag(SettingsTab.network)
+                AccountSettingsView()
+                    .tabItem {
+                        Label(SettingsTab.accounts.displayName, systemImage: SettingsTab.accounts.systemImage)
+                    }
+                    .tag(SettingsTab.accounts)
 
-            PrivacySettingsView()
-                .tabItem {
-                    Label(SettingsTab.privacy.displayName, systemImage: SettingsTab.privacy.systemImage)
-                }
-                .tag(SettingsTab.privacy)
+                NetworkSettingsView()
+                    .tabItem {
+                        Label(SettingsTab.network.displayName, systemImage: SettingsTab.network.systemImage)
+                    }
+                    .tag(SettingsTab.network)
 
-            AdvancedSettingsView()
-                .tabItem {
-                    Label(SettingsTab.advanced.displayName, systemImage: SettingsTab.advanced.systemImage)
-                }
-                .tag(SettingsTab.advanced)
+                PrivacySettingsView()
+                    .tabItem {
+                        Label(SettingsTab.privacy.displayName, systemImage: SettingsTab.privacy.systemImage)
+                    }
+                    .tag(SettingsTab.privacy)
+
+                AdvancedSettingsView()
+                    .tabItem {
+                        Label(SettingsTab.advanced.displayName, systemImage: SettingsTab.advanced.systemImage)
+                    }
+                    .tag(SettingsTab.advanced)
+            }
         }
-        .frame(width: 600, height: 480)
+        .frame(width: 620, height: 500)
     }
 }
 
@@ -103,7 +122,6 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
         .onChange(of: settings.theme) { _, _ in settings.save() }
         .onChange(of: settings.showMenuBarIcon) { _, _ in settings.save() }
         .onChange(of: settings.showDockIcon) { _, _ in settings.save() }
@@ -161,7 +179,6 @@ struct UploadSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
         .onChange(of: settings.defaultUploadMode) { _, _ in settings.save() }
         .onChange(of: settings.defaultDestination) { _, _ in settings.save() }
         .onChange(of: settings.defaultDuplicateMode) { _, _ in settings.save() }
@@ -189,15 +206,20 @@ struct AccountSettingsView: View {
                     ForEach(appState.auth.accounts) { account in
                         HStack {
                             Image(systemName: account.tokenStatus.systemImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 14, height: 14)
                                 .foregroundStyle(account.tokenStatus == .valid ? .green : .orange)
                                 .accessibilityHidden(true)
 
                             VStack(alignment: .leading) {
                                 Text(account.displayName)
                                     .font(.body)
+                                    .lineLimit(1)
                                 Text(account.email)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
 
                             Spacer()
@@ -205,6 +227,7 @@ struct AccountSettingsView: View {
                             Text(account.tokenStatus.displayName)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
 
                             Button("Disconnect") {
                                 try? appState.auth.disconnectAccount(account.id)
@@ -225,7 +248,6 @@ struct AccountSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
     }
 }
 
@@ -260,7 +282,6 @@ struct NetworkSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
         .onChange(of: settings.bandwidthLimitKBps) { _, _ in settings.save() }
         .onChange(of: settings.notificationPreference) { _, _ in settings.save() }
         .onChange(of: settings.notifyOnErrors) { _, _ in settings.save() }
@@ -297,7 +318,6 @@ struct PrivacySettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
         .alert("Clear All Local Data", isPresented: $showClearConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Clear Everything", role: .destructive) {
@@ -341,7 +361,6 @@ struct AdvancedSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
         .onChange(of: settings.maxRetryCount) { _, _ in settings.save() }
         .onChange(of: settings.debugLogsEnabled) { _, _ in settings.save() }
     }

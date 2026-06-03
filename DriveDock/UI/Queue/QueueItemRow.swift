@@ -13,8 +13,10 @@ struct QueueItemRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Image(systemName: item.isFolder ? "folder.fill" : fileIcon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 16, height: 16)
                         .foregroundStyle(item.isFolder ? Color.accentColor : Color.secondary)
-                        .font(.system(size: 14))
                         .accessibilityHidden(true)
 
                     Text(item.localFileName)
@@ -103,7 +105,9 @@ struct QueueItemRow: View {
     private func hoverButton(icon: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 12))
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 12, height: 12)
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.borderless)

@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SidebarView: View {
     @Environment(AppState.self) private var appState
-    @State private var showAccountPicker = false
 
     var body: some View {
         @Bindable var state = appState
@@ -10,59 +9,26 @@ struct SidebarView: View {
         List(selection: $state.selectedSidebarItem) {
             Section("Uploads") {
                 ForEach([SidebarItem.uploads, .queue, .active, .completed, .failed, .paused], id: \.self) { item in
-                    sidebarRow(for: item)
+                    Label(item.displayName, systemImage: item.systemImage)
+                        .tag(item)
+                        .badge(badgeCount(for: item))
                 }
             }
 
-            Section("Destinations") {
-                ForEach([SidebarItem.recentDestinations, .starredDestinations, .sharedDrives], id: \.self) { item in
-                    sidebarRow(for: item)
+            Section("Google Drive") {
+                ForEach([SidebarItem.myDrive, .sharedDrives, .recentFiles, .starredFiles], id: \.self) { item in
+                    Label(item.displayName, systemImage: item.systemImage)
+                        .tag(item)
                 }
             }
 
             Section {
-                sidebarRow(for: .history)
+                Label(SidebarItem.history.displayName, systemImage: SidebarItem.history.systemImage)
+                    .tag(SidebarItem.history)
             }
         }
         .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
-    }
-
-    @ViewBuilder
-    private func sidebarRow(for item: SidebarItem) -> some View {
-        Label(item.displayName, systemImage: item.systemImage)
-            .tag(item)
-            .badge(badgeCount(for: item))
-            .accessibilityLabel("\(item.displayName), \(badgeCount(for: item)) items")
-            .contextMenu {
-                switch item.section {
-                case .uploads:
-                    Button("Show in Uploads") {
-                        appState.selectedSidebarItem = .uploads
-                    }
-                    Divider()
-                    Button("Pause All") {
-                        appState.engine.pauseAll()
-                    }
-                    .disabled(!appState.engine.isProcessing)
-                    Button("Resume All") {
-                        appState.engine.resumeAll()
-                    }
-                    Divider()
-                    Button("Clear Completed") {
-                        appState.engine.clearCompleted()
-                    }
-                    .disabled(appState.engine.completedCount == 0)
-                case .destinations:
-                    Button("Browse Destination") {
-                        appState.selectedSidebarItem = item
-                    }
-                case .other:
-                    Button("Go to \(item.displayName)") {
-                        appState.selectedSidebarItem = item
-                    }
-                }
-            }
+        .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 240)
     }
 
     private func badgeCount(for item: SidebarItem) -> Int {

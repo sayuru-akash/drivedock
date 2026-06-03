@@ -17,22 +17,28 @@ struct AccountSelectorButton: View {
                                 .aspectRatio(contentMode: .fill)
                         } placeholder: {
                             Image(systemName: "person.circle.fill")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
                         }
                         .frame(width: 20, height: 20)
                         .clipShape(Circle())
                     } else {
                         Image(systemName: "person.circle.fill")
-                            .font(.system(size: 16))
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 16, height: 16)
                     }
 
                     Text(account.email)
                         .font(.caption)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .frame(maxWidth: 150)
+                        .frame(maxWidth: 120)
                 } else {
                     Image(systemName: "person.circle")
-                        .font(.system(size: 16))
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 16, height: 16)
                     Text("No Account")
                         .font(.caption)
                 }
@@ -67,8 +73,10 @@ struct AccountPopover: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: account.tokenStatus.systemImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 12)
                             .foregroundStyle(account.tokenStatus == .valid ? .green : .orange)
-                            .font(.system(size: 12))
                             .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 1) {
@@ -85,8 +93,10 @@ struct AccountPopover: View {
 
                         if appState.auth.activeAccount?.id == account.id {
                             Image(systemName: "checkmark.circle.fill")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 12, height: 12)
                                 .foregroundStyle(Color.accentColor)
-                                .font(.system(size: 12))
                                 .accessibilityLabel("Currently selected")
                         }
                     }

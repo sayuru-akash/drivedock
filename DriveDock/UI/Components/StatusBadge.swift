@@ -6,10 +6,13 @@ struct StatusBadge: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: status.systemImage)
-                .font(.system(size: 10))
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 10, height: 10)
                 .accessibilityHidden(true)
             Text(status.displayName)
                 .font(.caption2.weight(.medium))
+                .lineLimit(1)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)

@@ -58,6 +58,7 @@
 		A10057 /* SpeedTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10057; };
 		A10058 /* FileDropHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10058; };
 		A10059 /* DriveFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10059; };
+		A10060 /* DriveBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -111,6 +112,7 @@
 		B10057 /* SpeedTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedTrackerTests.swift; sourceTree = "<group>"; };
 		B10058 /* FileDropHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropHandlerTests.swift; sourceTree = "<group>"; };
 		B10059 /* DriveFolderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveFolderTests.swift; sourceTree = "<group>"; };
+		B10060 /* DriveBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveBrowserView.swift; sourceTree = "<group>"; };
 		D10002 /* DriveDockTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DriveDockTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C10002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -348,6 +350,7 @@
 				B10036 /* RecentDestinationsView.swift */,
 				B10037 /* StarredDestinationsView.swift */,
 				B10038 /* SharedDrivesView.swift */,
+				B10060 /* DriveBrowserView.swift */,
 			);
 			path = Destination;
 			sourceTree = "<group>";
@@ -547,6 +550,7 @@
 				A10038 /* SharedDrivesView.swift in Sources */,
 				A10040 /* CompletionSummaryView.swift in Sources */,
 				A10041 /* AnimatedViews.swift in Sources */,
+				A10060 /* DriveBrowserView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
