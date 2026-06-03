@@ -1,0 +1,805 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10001 /* DriveDockApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001; };
+		A10002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002; };
+		A10003 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003; };
+		A10004 /* DriveAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004; };
+		A10005 /* UploadItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10005; };
+		A10006 /* UploadBatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10006; };
+		A10007 /* DriveFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007; };
+		A10008 /* UploadHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008; };
+		A10009 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009; };
+		A10010 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10010; };
+		A10011 /* GoogleAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011; };
+		A10012 /* DriveAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012; };
+		A10013 /* UploadEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10013; };
+		A10014 /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014; };
+		A10015 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015; };
+		A10016 /* MIMETypeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016; };
+		A10017 /* FileDropHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10017; };
+		A10018 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10018; };
+		A10019 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019; };
+		A10020 /* UploadsOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020; };
+		A10021 /* DropZoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10021; };
+		A10022 /* UploadQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10022; };
+		A10023 /* QueueToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10023; };
+		A10024 /* FilteredQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10024; };
+		A10025 /* QueueItemRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10025; };
+		A10026 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10026; };
+		A10027 /* ItemActionsMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10027; };
+		A10028 /* StatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10028; };
+		A10029 /* AccountSelectorButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10029; };
+		A10030 /* MenuBarViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10030; };
+		A10031 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10031; };
+		A10032 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10032; };
+		A10033 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10033; };
+		A10034 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10034; };
+		A10035 /* DestinationPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10035; };
+		A10036 /* RecentDestinationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10036; };
+		A10037 /* StarredDestinationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10037; };
+		A10038 /* SharedDrivesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10038; };
+		A10039 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C10001; };
+		A10040 /* CompletionSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10040; };
+		A10041 /* AnimatedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10041; };
+		A10050 /* UploadItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10050; };
+		A10051 /* UploadBatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10051; };
+		A10052 /* DriveAccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10052; };
+		A10053 /* AppSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10053; };
+		A10054 /* MIMETypeDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10054; };
+		A10055 /* PersistenceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10055; };
+		A10056 /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10056; };
+		A10057 /* SpeedTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10057; };
+		A10058 /* FileDropHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10058; };
+		A10059 /* DriveFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10059; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B10001 /* DriveDockApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveDockApp.swift; sourceTree = "<group>"; };
+		B10002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B10003 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		B10004 /* DriveAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveAccount.swift; sourceTree = "<group>"; };
+		B10005 /* UploadItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadItem.swift; sourceTree = "<group>"; };
+		B10006 /* UploadBatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadBatch.swift; sourceTree = "<group>"; };
+		B10007 /* DriveFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveFolder.swift; sourceTree = "<group>"; };
+		B10008 /* UploadHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadHistory.swift; sourceTree = "<group>"; };
+		B10009 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		B10010 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		B10011 /* GoogleAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAuthService.swift; sourceTree = "<group>"; };
+		B10012 /* DriveAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveAPIService.swift; sourceTree = "<group>"; };
+		B10013 /* UploadEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadEngine.swift; sourceTree = "<group>"; };
+		B10014 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
+		B10015 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		B10016 /* MIMETypeDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIMETypeDetector.swift; sourceTree = "<group>"; };
+		B10017 /* FileDropHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropHandler.swift; sourceTree = "<group>"; };
+		B10018 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		B10019 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
+		B10020 /* UploadsOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadsOverviewView.swift; sourceTree = "<group>"; };
+		B10021 /* DropZoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropZoneView.swift; sourceTree = "<group>"; };
+		B10022 /* UploadQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadQueueView.swift; sourceTree = "<group>"; };
+		B10023 /* QueueToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueToolbar.swift; sourceTree = "<group>"; };
+		B10024 /* FilteredQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilteredQueueView.swift; sourceTree = "<group>"; };
+		B10025 /* QueueItemRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueItemRow.swift; sourceTree = "<group>"; };
+		B10026 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
+		B10027 /* ItemActionsMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemActionsMenu.swift; sourceTree = "<group>"; };
+		B10028 /* StatusBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBar.swift; sourceTree = "<group>"; };
+		B10029 /* AccountSelectorButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSelectorButton.swift; sourceTree = "<group>"; };
+		B10030 /* MenuBarViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViews.swift; sourceTree = "<group>"; };
+		B10031 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		B10032 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
+		B10033 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B10034 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		B10035 /* DestinationPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationPickerView.swift; sourceTree = "<group>"; };
+		B10036 /* RecentDestinationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentDestinationsView.swift; sourceTree = "<group>"; };
+		B10037 /* StarredDestinationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarredDestinationsView.swift; sourceTree = "<group>"; };
+		B10038 /* SharedDrivesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDrivesView.swift; sourceTree = "<group>"; };
+		B10040 /* CompletionSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionSummaryView.swift; sourceTree = "<group>"; };
+		B10041 /* AnimatedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedViews.swift; sourceTree = "<group>"; };
+		B10050 /* UploadItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadItemTests.swift; sourceTree = "<group>"; };
+		B10051 /* UploadBatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadBatchTests.swift; sourceTree = "<group>"; };
+		B10052 /* DriveAccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveAccountTests.swift; sourceTree = "<group>"; };
+		B10053 /* AppSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsTests.swift; sourceTree = "<group>"; };
+		B10054 /* MIMETypeDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIMETypeDetectorTests.swift; sourceTree = "<group>"; };
+		B10055 /* PersistenceServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceServiceTests.swift; sourceTree = "<group>"; };
+		B10056 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
+		B10057 /* SpeedTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedTrackerTests.swift; sourceTree = "<group>"; };
+		B10058 /* FileDropHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropHandlerTests.swift; sourceTree = "<group>"; };
+		B10059 /* DriveFolderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveFolderTests.swift; sourceTree = "<group>"; };
+		D10002 /* DriveDockTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DriveDockTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C10002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C10003 /* DriveDock.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DriveDock.entitlements; sourceTree = "<group>"; };
+		C10010 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		D10001 /* DriveDock.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DriveDock.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXContainerItemProxy section */
+		G10013 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = H10001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = G10001;
+			remoteInfo = DriveDock;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		G10012 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = G10001 /* DriveDock */;
+			targetProxy = G10013 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E10001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E10002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		F10001 = {
+			isa = PBXGroup;
+			children = (
+				F10002 /* DriveDock */,
+				F10100 /* DriveDockTests */,
+				F10010 /* Resources */,
+				F10099 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F10002 /* DriveDock */ = {
+			isa = PBXGroup;
+			children = (
+				F10003 /* App */,
+				F10004 /* Core */,
+				F10005 /* UI */,
+				F10006 /* Utilities */,
+			);
+			path = DriveDock;
+			sourceTree = "<group>";
+		};
+		F10003 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				B10001 /* DriveDockApp.swift */,
+				B10002 /* ContentView.swift */,
+				B10003 /* AppState.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		F10004 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				F10007 /* Models */,
+				F10008 /* Services */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		F10007 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B10004 /* DriveAccount.swift */,
+				B10005 /* UploadItem.swift */,
+				B10006 /* UploadBatch.swift */,
+				B10007 /* DriveFolder.swift */,
+				B10008 /* UploadHistory.swift */,
+				B10009 /* AppSettings.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		F10008 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F10011 /* Auth */,
+				F10012 /* DriveAPI */,
+				F10013 /* Upload */,
+				F10014 /* Persistence */,
+				F10015 /* Notifications */,
+				F10016 /* FileAccess */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		F10011 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				B10010 /* KeychainService.swift */,
+				B10011 /* GoogleAuthService.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		F10012 /* DriveAPI */ = {
+			isa = PBXGroup;
+			children = (
+				B10012 /* DriveAPIService.swift */,
+			);
+			path = DriveAPI;
+			sourceTree = "<group>";
+		};
+		F10013 /* Upload */ = {
+			isa = PBXGroup;
+			children = (
+				B10013 /* UploadEngine.swift */,
+			);
+			path = Upload;
+			sourceTree = "<group>";
+		};
+		F10014 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				B10014 /* PersistenceService.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		F10015 /* Notifications */ = {
+			isa = PBXGroup;
+			children = (
+				B10015 /* NotificationService.swift */,
+			);
+			path = Notifications;
+			sourceTree = "<group>";
+		};
+		F10016 /* FileAccess */ = {
+			isa = PBXGroup;
+			children = (
+				B10016 /* MIMETypeDetector.swift */,
+				B10017 /* FileDropHandler.swift */,
+			);
+			path = FileAccess;
+			sourceTree = "<group>";
+		};
+		F10005 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				F10017 /* Onboarding */,
+				F10018 /* Main */,
+				F10019 /* Queue */,
+				F10020 /* Inspector */,
+				F10021 /* Settings */,
+				F10022 /* History */,
+				F10023 /* Destination */,
+				F10024 /* MenuBar */,
+				F10025 /* Components */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		F10017 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				B10031 /* OnboardingView.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		F10018 /* Main */ = {
+			isa = PBXGroup;
+			children = (
+				B10018 /* SidebarView.swift */,
+				B10019 /* DetailView.swift */,
+				B10020 /* UploadsOverviewView.swift */,
+				B10021 /* DropZoneView.swift */,
+			);
+			path = Main;
+			sourceTree = "<group>";
+		};
+		F10019 /* Queue */ = {
+			isa = PBXGroup;
+			children = (
+				B10022 /* UploadQueueView.swift */,
+				B10023 /* QueueToolbar.swift */,
+				B10024 /* FilteredQueueView.swift */,
+				B10025 /* QueueItemRow.swift */,
+			);
+			path = Queue;
+			sourceTree = "<group>";
+		};
+		F10020 /* Inspector */ = {
+			isa = PBXGroup;
+			children = (
+				B10032 /* InspectorView.swift */,
+			);
+			path = Inspector;
+			sourceTree = "<group>";
+		};
+		F10021 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				B10033 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		F10022 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				B10034 /* HistoryView.swift */,
+			);
+			path = History;
+			sourceTree = "<group>";
+		};
+		F10023 /* Destination */ = {
+			isa = PBXGroup;
+			children = (
+				B10035 /* DestinationPickerView.swift */,
+				B10036 /* RecentDestinationsView.swift */,
+				B10037 /* StarredDestinationsView.swift */,
+				B10038 /* SharedDrivesView.swift */,
+			);
+			path = Destination;
+			sourceTree = "<group>";
+		};
+		F10024 /* MenuBar */ = {
+			isa = PBXGroup;
+			children = (
+				B10030 /* MenuBarViews.swift */,
+			);
+			path = MenuBar;
+			sourceTree = "<group>";
+		};
+		F10025 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				B10026 /* StatusBadge.swift */,
+				B10027 /* ItemActionsMenu.swift */,
+				B10028 /* StatusBar.swift */,
+				B10029 /* AccountSelectorButton.swift */,
+				B10040 /* CompletionSummaryView.swift */,
+				B10041 /* AnimatedViews.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		F10006 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		F10010 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				C10001 /* Assets.xcassets */,
+				C10002 /* Info.plist */,
+				C10003 /* DriveDock.entitlements */,
+			);
+			path = DriveDock/Resources;
+			sourceTree = "<group>";
+		};
+		F10099 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D10001 /* DriveDock.app */,
+				D10002 /* DriveDockTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F10100 /* DriveDockTests */ = {
+			isa = PBXGroup;
+			children = (
+				B10050 /* UploadItemTests.swift */,
+				B10051 /* UploadBatchTests.swift */,
+				B10052 /* DriveAccountTests.swift */,
+				B10053 /* AppSettingsTests.swift */,
+				B10054 /* MIMETypeDetectorTests.swift */,
+				B10055 /* PersistenceServiceTests.swift */,
+				B10056 /* KeychainServiceTests.swift */,
+				B10057 /* SpeedTrackerTests.swift */,
+				B10058 /* FileDropHandlerTests.swift */,
+				B10059 /* DriveFolderTests.swift */,
+			);
+			path = DriveDockTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		G10001 /* DriveDock */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = H10003 /* Build configuration list for PBXNativeTarget "DriveDock" */;
+			buildPhases = (
+				G10002 /* Sources */,
+				E10001 /* Frameworks */,
+				G10003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DriveDock;
+			productName = DriveDock;
+			productReference = D10001 /* DriveDock.app */;
+			productType = "com.apple.product-type.application";
+		};
+		G10010 /* DriveDockTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = H10005 /* Build configuration list for PBXNativeTarget "DriveDockTests" */;
+			buildPhases = (
+				G10011 /* Sources */,
+				E10002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				G10012 /* PBXTargetDependency */,
+			);
+			name = DriveDockTests;
+			productName = DriveDockTests;
+			productReference = D10002 /* DriveDockTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		H10001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					G10001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					G10010 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = G10001;
+					};
+				};
+			};
+			buildConfigurationList = H10002 /* Build configuration list for PBXProject "DriveDock" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = F10001;
+			productRefGroup = F10099 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				G10001 /* DriveDock */,
+				G10010 /* DriveDockTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		G10003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10039 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		G10002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10001 /* DriveDockApp.swift in Sources */,
+				A10002 /* ContentView.swift in Sources */,
+				A10003 /* AppState.swift in Sources */,
+				A10004 /* DriveAccount.swift in Sources */,
+				A10005 /* UploadItem.swift in Sources */,
+				A10006 /* UploadBatch.swift in Sources */,
+				A10007 /* DriveFolder.swift in Sources */,
+				A10008 /* UploadHistory.swift in Sources */,
+				A10009 /* AppSettings.swift in Sources */,
+				A10010 /* KeychainService.swift in Sources */,
+				A10011 /* GoogleAuthService.swift in Sources */,
+				A10012 /* DriveAPIService.swift in Sources */,
+				A10013 /* UploadEngine.swift in Sources */,
+				A10014 /* PersistenceService.swift in Sources */,
+				A10015 /* NotificationService.swift in Sources */,
+				A10016 /* MIMETypeDetector.swift in Sources */,
+				A10017 /* FileDropHandler.swift in Sources */,
+				A10018 /* SidebarView.swift in Sources */,
+				A10019 /* DetailView.swift in Sources */,
+				A10020 /* UploadsOverviewView.swift in Sources */,
+				A10021 /* DropZoneView.swift in Sources */,
+				A10022 /* UploadQueueView.swift in Sources */,
+				A10023 /* QueueToolbar.swift in Sources */,
+				A10024 /* FilteredQueueView.swift in Sources */,
+				A10025 /* QueueItemRow.swift in Sources */,
+				A10026 /* StatusBadge.swift in Sources */,
+				A10027 /* ItemActionsMenu.swift in Sources */,
+				A10028 /* StatusBar.swift in Sources */,
+				A10029 /* AccountSelectorButton.swift in Sources */,
+				A10030 /* MenuBarViews.swift in Sources */,
+				A10031 /* OnboardingView.swift in Sources */,
+				A10032 /* InspectorView.swift in Sources */,
+				A10033 /* SettingsView.swift in Sources */,
+				A10034 /* HistoryView.swift in Sources */,
+				A10035 /* DestinationPickerView.swift in Sources */,
+				A10036 /* RecentDestinationsView.swift in Sources */,
+				A10037 /* StarredDestinationsView.swift in Sources */,
+				A10038 /* SharedDrivesView.swift in Sources */,
+				A10040 /* CompletionSummaryView.swift in Sources */,
+				A10041 /* AnimatedViews.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		G10011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10050 /* UploadItemTests.swift in Sources */,
+				A10051 /* UploadBatchTests.swift in Sources */,
+				A10052 /* DriveAccountTests.swift in Sources */,
+				A10053 /* AppSettingsTests.swift in Sources */,
+				A10054 /* MIMETypeDetectorTests.swift in Sources */,
+				A10055 /* PersistenceServiceTests.swift in Sources */,
+				A10056 /* KeychainServiceTests.swift in Sources */,
+				A10057 /* SpeedTrackerTests.swift in Sources */,
+				A10058 /* FileDropHandlerTests.swift in Sources */,
+				A10059 /* DriveFolderTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		I10001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		I10002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		I10003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C10010 /* Secrets.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DriveDock/Resources/DriveDock.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DriveDock/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DriveDock;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 DriveDock Contributors. MIT License.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.drivedock.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		I10004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C10010 /* Secrets.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DriveDock/Resources/DriveDock.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DriveDock/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DriveDock;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 DriveDock Contributors. MIT License.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.drivedock.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		I10005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.drivedock.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DriveDock.app/Contents/MacOS/DriveDock";
+			};
+			name = Debug;
+		};
+		I10006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.drivedock.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DriveDock.app/Contents/MacOS/DriveDock";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		H10002 /* Build configuration list for PBXProject "DriveDock" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				I10001 /* Debug */,
+				I10002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		H10003 /* Build configuration list for PBXNativeTarget "DriveDock" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				I10003 /* Debug */,
+				I10004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		H10005 /* Build configuration list for PBXNativeTarget "DriveDockTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				I10005 /* Debug */,
+				I10006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = H10001 /* Project object */;
+}

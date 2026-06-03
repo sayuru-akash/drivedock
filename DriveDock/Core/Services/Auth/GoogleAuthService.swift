@@ -37,7 +37,11 @@ final class GoogleAuthService {
 
     private let keychain = KeychainService.shared
     private let clientID: String
-    private let redirectURI = "com.googleusercontent.apps.drivedock:/oauth2callback"
+    private let clientSecret: String
+    private var redirectURI: String {
+        let reversedID = clientID.components(separatedBy: ".").reversed().joined(separator: ".")
+        return "\(reversedID):/oauth2callback"
+    }
     private let scopes = [
         "https://www.googleapis.com/auth/drive.file",
         "https://www.googleapis.com/auth/drive.readonly",
@@ -57,6 +61,7 @@ final class GoogleAuthService {
 
     private init() {
         self.clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String ?? ""
+        self.clientSecret = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_SECRET") as? String ?? ""
         loadAccounts()
     }
 
@@ -249,6 +254,7 @@ final class GoogleAuthService {
         let body = [
             "code": code,
             "client_id": clientID,
+            "client_secret": clientSecret,
             "redirect_uri": redirectURI,
             "grant_type": "authorization_code",
             "code_verifier": codeVerifier
@@ -272,6 +278,7 @@ final class GoogleAuthService {
         let body = [
             "refresh_token": refreshToken,
             "client_id": clientID,
+            "client_secret": clientSecret,
             "grant_type": "refresh_token"
         ]
         request.httpBody = body.map { "\($0.key)=\($0.value)" }.joined(separator: "&").data(using: .utf8)

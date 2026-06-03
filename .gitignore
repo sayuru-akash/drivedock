@@ -1,6 +1,6 @@
 # Xcode
-*.xcodeproj/
-*.xcworkspace/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
 xcuserdata/
 *.xcuserstate
 *.xccheckout
@@ -15,7 +15,6 @@ build/
 !default.mode1v3
 !default.mode2v3
 !default.perspectivev3
-!default.xcworkspace
 
 # Swift Package Manager
 .build/
@@ -53,25 +52,21 @@ fastlane/Preview.html
 fastlane/screenshots
 fastlane/test_output
 
-# Secrets
+# Secrets - NEVER commit these
 *.p8
 *.p12
 GoogleService-Info.plist
 Secrets.plist
+Secrets.xcconfig
 
 # Build artifacts
 *.o
 *.linkfilelist
 *.xctimeline
-*.playground
 
-# Playground
+# Playgrounds
 timeline.xctimeline
 playground.xcworkspace
 
 # Archives
 *.xcarchive
-
-# Playgrounds
-timeline.xctimeline
-playground.xcworkspace

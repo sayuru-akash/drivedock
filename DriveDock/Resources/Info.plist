@@ -35,11 +35,13 @@
 			<string>com.drivedock.app.oauth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.drivedock</string>
+				<string>$(GOOGLE_URL_SCHEME)</string>
 			</array>
 		</dict>
 	</array>
 	<key>GOOGLE_CLIENT_ID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>
+	<key>GOOGLE_CLIENT_SECRET</key>
+	<string>$(GOOGLE_CLIENT_SECRET)</string>
 </dict>
 </plist>
