@@ -1,5 +1,157 @@
 import Foundation
+import AppKit
 import CryptoKit
+
+// MARK: - Simple OAuth HTTP Server
+
+final class OAuthHTTPServer {
+    private var serverSocket: Int32 = -1
+    private var callbackHandler: ((String) -> Void)?
+    private var running = false
+    private let port: UInt16 = 18923
+
+    func start(handler: @escaping (String) -> Void) -> Bool {
+        self.callbackHandler = handler
+
+        // Create socket
+        serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        guard serverSocket >= 0 else {
+            print("[OAuth] Failed to create socket: \(errno)")
+            return false
+        }
+
+        // Allow address reuse
+        var reuse: Int32 = 1
+        setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+
+        // Bind
+        var addr = sockaddr_in()
+        addr.sin_family = UInt8(AF_INET)
+        addr.sin_port = port.bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+
+        let bindResult = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(serverSocket, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+
+        guard bindResult == 0 else {
+            print("[OAuth] Failed to bind to port \(port): \(errno)")
+            Darwin.close(serverSocket)
+            serverSocket = -1
+            return false
+        }
+
+        // Listen
+        guard listen(serverSocket, 1) == 0 else {
+            print("[OAuth] Failed to listen: \(errno)")
+            Darwin.close(serverSocket)
+            serverSocket = -1
+            return false
+        }
+
+        running = true
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.acceptConnections()
+        }
+
+        print("[OAuth] Server started on port \(port)")
+        return true
+    }
+
+    func stop() {
+        running = false
+        if serverSocket >= 0 {
+            Darwin.shutdown(serverSocket, SHUT_RDWR)
+            Darwin.close(serverSocket)
+            serverSocket = -1
+        }
+    }
+
+    private func acceptConnections() {
+        while running {
+            var clientAddr = sockaddr_in()
+            var clientAddrLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+
+            let client = withUnsafeMutablePointer(to: &clientAddr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    Darwin.accept(serverSocket, $0, &clientAddrLen)
+                }
+            }
+
+            guard client >= 0 else {
+                if running { continue }
+                break
+            }
+
+            handleClient(client)
+        }
+    }
+
+    private func handleClient(_ client: Int32) {
+        // Set receive timeout
+        var timeout = timeval(tv_sec: 5, tv_usec: 0)
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        let bytesRead = recv(client, &buffer, buffer.count - 1, 0)
+
+        guard bytesRead > 0 else {
+            Darwin.close(client)
+            return
+        }
+
+        let request = String(cString: buffer)
+
+        // Parse: GET /oauth2callback?code=XXX&state=YYY HTTP/1.1
+        guard let firstLine = request.components(separatedBy: "\r\n").first,
+              firstLine.hasPrefix("GET ") else {
+            sendResponse(client, status: "400 Bad Request", body: "Bad Request")
+            Darwin.close(client)
+            return
+        }
+
+        let parts = firstLine.components(separatedBy: " ")
+        guard parts.count >= 2 else {
+            sendResponse(client, status: "400 Bad Request", body: "Bad Request")
+            Darwin.close(client)
+            return
+        }
+
+        let path = parts[1]
+
+        if path.contains("/oauth2callback") && path.contains("code=") {
+            let callbackURL = "http://127.0.0.1:\(port)\(path)"
+
+            let html = """
+            <!DOCTYPE html><html><head><meta charset="utf-8"><title>DriveDock - Connected</title>
+            <style>body{font-family:-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:linear-gradient(135deg,#1a9f4d,#0d7a3a);color:white;text-align:center}.box{padding:60px;border-radius:24px;background:rgba(255,255,255,0.12)}h1{font-size:2.5em;margin:0 0 10px}.check{font-size:5em}</style>
+            </head><body><div class="box"><div class="check">&#10003;</div><h1>Connected!</h1><p>Close this tab and return to DriveDock.</p></div></body></html>
+            """
+
+            sendResponse(client, status: "200 OK", body: html)
+
+            DispatchQueue.main.async { [weak self] in
+                self?.callbackHandler?(callbackURL)
+            }
+        } else {
+            sendResponse(client, status: "404 Not Found", body: "Not Found")
+        }
+
+        Darwin.close(client)
+    }
+
+    private func sendResponse(_ client: Int32, status: String, body: String) {
+        let response = "HTTP/1.1 \(status)\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
+        response.withCString { ptr in
+            _ = Darwin.send(client, ptr, strlen(ptr), 0)
+        }
+    }
+}
+
+// MARK: - OAuth Models
 
 struct OAuthTokenResponse: Codable {
     let accessToken: String
@@ -24,24 +176,27 @@ struct OAuthUserInfo: Codable {
     let picture: String?
 
     enum CodingKeys: String, CodingKey {
-        case id
-        case email
-        case name
-        case picture
+        case id, email, name, picture
     }
 }
+
+struct StoredToken: Codable {
+    let accessToken: String
+    let refreshToken: String?
+    let expiresAt: Date?
+}
+
+// MARK: - Google Auth Service
 
 @Observable
 final class GoogleAuthService {
     static let shared = GoogleAuthService()
 
     private let keychain = KeychainService.shared
-    private let clientID: String
-    private let clientSecret: String
-    private var redirectURI: String {
-        let reversedID = clientID.components(separatedBy: ".").reversed().joined(separator: ".")
-        return "\(reversedID):/oauth2callback"
-    }
+    let clientID: String
+    let clientSecret: String
+    private let redirectURI = "http://127.0.0.1:18923/oauth2callback"
+
     private let scopes = [
         "https://www.googleapis.com/auth/drive.file",
         "https://www.googleapis.com/auth/drive.readonly",
@@ -55,9 +210,9 @@ final class GoogleAuthService {
     private(set) var authError: String?
 
     private var codeVerifier: String?
+    private var pendingAuthContinuation: CheckedContinuation<Void, Error>?
+    private var callbackServer: OAuthHTTPServer?
     private var activeRefreshTasks: [String: Task<String, Error>] = [:]
-    private var userInfoCache: [String: (userInfo: OAuthUserInfo, cachedAt: Date)] = [:]
-    private let userInfoCacheTTL: TimeInterval = 3600
 
     private init() {
         self.clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String ?? ""
@@ -67,18 +222,33 @@ final class GoogleAuthService {
 
     // MARK: - OAuth Flow
 
-    func startAuthentication() async throws -> URL {
+    func startAuthentication() async throws {
         isAuthenticating = true
         authError = nil
 
         codeVerifier = generateCodeVerifier()
         guard let verifier = codeVerifier else {
+            isAuthenticating = false
             throw AuthError.codeVerifierGenerationFailed
         }
 
         let codeChallenge = generateCodeChallenge(from: verifier)
-        let state = UUID().uuidString
 
+        // Start local HTTP server
+        let server = OAuthHTTPServer()
+        let started = server.start { [weak self] callbackURL in
+            Task { @MainActor in
+                self?.handleOAuthCallback(callbackURL)
+            }
+        }
+
+        guard started else {
+            isAuthenticating = false
+            throw AuthError.serverStartFailed
+        }
+        self.callbackServer = server
+
+        // Build OAuth URL
         var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
@@ -87,51 +257,31 @@ final class GoogleAuthService {
             URLQueryItem(name: "scope", value: scopes.joined(separator: " ")),
             URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
-            URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "access_type", value: "offline"),
             URLQueryItem(name: "prompt", value: "consent")
         ]
 
         guard let url = components.url else {
+            isAuthenticating = false
+            server.stop()
             throw AuthError.invalidAuthURL
         }
 
-        return url
+        // Open browser
+        NSWorkspace.shared.open(url)
+
+        // Wait for callback
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            self.pendingAuthContinuation = continuation
+        }
     }
 
-    func handleCallback(url: URL) async throws -> DriveAccount {
-        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
-            throw AuthError.invalidCallback
-        }
-
-        guard let verifier = codeVerifier else {
-            throw AuthError.noCodeVerifier
-        }
-
-        let tokenResponse = try await exchangeCodeForTokens(code: code, codeVerifier: verifier)
-        let userInfo = try await fetchUserInfo(accessToken: tokenResponse.accessToken)
-
-        let account = DriveAccount(
-            id: userInfo.id,
-            email: userInfo.email,
-            displayName: userInfo.name ?? userInfo.email,
-            avatarURL: userInfo.picture.flatMap(URL.init),
-            connectedDate: Date(),
-            isActive: true,
-            tokenStatus: .valid
-        )
-
-        try saveTokens(accountID: account.id, response: tokenResponse)
-
-        if accounts.isEmpty {
-            activeAccount = account
-        }
-        accounts.append(account)
-        saveAccountList()
-
+    func cancelAuthentication() {
         isAuthenticating = false
-        return account
+        callbackServer?.stop()
+        callbackServer = nil
+        pendingAuthContinuation?.resume(throwing: AuthError.userCancelled)
+        pendingAuthContinuation = nil
     }
 
     // MARK: - Token Management
@@ -140,25 +290,20 @@ final class GoogleAuthService {
         guard let tokenData = try? keychain.loadString(key: "token_\(accountID)") else {
             throw AuthError.noToken
         }
-
         guard let data = tokenData.data(using: .utf8),
               let token = try? JSONDecoder().decode(StoredToken.self, from: data) else {
             throw AuthError.tokenDecodingFailed
         }
-
         if let expiresAt = token.expiresAt, Date() < expiresAt.addingTimeInterval(-120) {
             return token.accessToken
         }
-
         guard let refreshToken = token.refreshToken else {
             updateAccountStatus(accountID, status: .expired)
             throw AuthError.tokenExpired
         }
-
         if let existingTask = activeRefreshTasks[accountID] {
             return try await existingTask.value
         }
-
         let task = Task<String, Error> {
             defer { activeRefreshTasks.removeValue(forKey: accountID) }
             return try await refreshAccessTokenWithRetry(refreshToken: refreshToken, accountID: accountID)
@@ -190,60 +335,72 @@ final class GoogleAuthService {
         }
     }
 
-    func isTokenValid(for accountID: String) -> Bool {
-        guard let tokenData = try? keychain.loadString(key: "token_\(accountID)"),
-              let data = tokenData.data(using: .utf8),
-              let token = try? JSONDecoder().decode(StoredToken.self, from: data),
-              let expiresAt = token.expiresAt else {
-            return false
+    // MARK: - Private
+
+    private func handleOAuthCallback(_ urlString: String) {
+        guard let url = URL(string: urlString),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
+            isAuthenticating = false
+            authError = "Invalid callback"
+            callbackServer?.stop()
+            callbackServer = nil
+            pendingAuthContinuation?.resume(throwing: AuthError.invalidCallback)
+            pendingAuthContinuation = nil
+            return
         }
-        return Date() < expiresAt.addingTimeInterval(-120)
-    }
 
-    func clearUserInfoCache(for accountID: String? = nil) {
-        if let accountID {
-            let tokenData = try? keychain.loadString(key: "token_\(accountID)")
-            if let data = tokenData?.data(using: .utf8),
-               let token = try? JSONDecoder().decode(StoredToken.self, from: data) {
-                let cacheKey = String(token.accessToken.prefix(32))
-                userInfoCache.removeValue(forKey: cacheKey)
-            }
-        } else {
-            userInfoCache.removeAll()
+        guard let verifier = codeVerifier else {
+            isAuthenticating = false
+            authError = "Code verifier lost"
+            callbackServer?.stop()
+            callbackServer = nil
+            pendingAuthContinuation?.resume(throwing: AuthError.noCodeVerifier)
+            pendingAuthContinuation = nil
+            return
         }
-    }
 
-    // MARK: - Private Helpers
-
-    private func refreshAccessTokenWithRetry(refreshToken: String, accountID: String, maxRetries: Int = 3) async throws -> String {
-        var lastError: Error?
-        for attempt in 0..<maxRetries {
+        Task {
             do {
-                return try await refreshAccessToken(refreshToken: refreshToken, accountID: accountID)
+                let tokenResponse = try await exchangeCodeForTokens(code: code, codeVerifier: verifier)
+                let userInfo = try await fetchUserInfo(accessToken: tokenResponse.accessToken)
+
+                let account = DriveAccount(
+                    id: userInfo.id,
+                    email: userInfo.email,
+                    displayName: userInfo.name ?? userInfo.email,
+                    avatarURL: userInfo.picture.flatMap(URL.init),
+                    connectedDate: Date(),
+                    isActive: true,
+                    tokenStatus: .valid
+                )
+
+                try saveTokens(accountID: account.id, response: tokenResponse)
+
+                if !accounts.contains(where: { $0.id == account.id }) {
+                    accounts.append(account)
+                }
+                activeAccount = account
+                saveAccountList()
+
+                await MainActor.run {
+                    isAuthenticating = false
+                    callbackServer?.stop()
+                    callbackServer = nil
+                    pendingAuthContinuation?.resume()
+                    pendingAuthContinuation = nil
+                }
             } catch {
-                lastError = error
-                if let authError = error as? AuthError {
-                    switch authError {
-                    case .tokenRefreshFailed:
-                        if attempt < maxRetries - 1 {
-                            let delay = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
-                            try? await Task.sleep(nanoseconds: delay)
-                            continue
-                        }
-                    default:
-                        throw error
-                    }
+                await MainActor.run {
+                    isAuthenticating = false
+                    authError = error.localizedDescription
+                    callbackServer?.stop()
+                    callbackServer = nil
+                    pendingAuthContinuation?.resume(throwing: error)
+                    pendingAuthContinuation = nil
                 }
-                let nsError = error as NSError
-                if nsError.domain == NSURLErrorDomain && attempt < maxRetries - 1 {
-                    let delay = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
-                    try? await Task.sleep(nanoseconds: delay)
-                    continue
-                }
-                throw error
             }
         }
-        throw lastError ?? AuthError.tokenRefreshFailed
     }
 
     private func exchangeCodeForTokens(code: String, codeVerifier: String) async throws -> OAuthTokenResponse {
@@ -264,10 +421,27 @@ final class GoogleAuthService {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let msg = String(data: data, encoding: .utf8) ?? ""
+            print("[OAuth] Token exchange failed: \(msg)")
             throw AuthError.tokenExchangeFailed
         }
 
         return try JSONDecoder().decode(OAuthTokenResponse.self, from: data)
+    }
+
+    private func refreshAccessTokenWithRetry(refreshToken: String, accountID: String, retries: Int = 3) async throws -> String {
+        var lastError: Error?
+        for attempt in 0..<retries {
+            do {
+                return try await refreshAccessToken(refreshToken: refreshToken, accountID: accountID)
+            } catch {
+                lastError = error
+                if attempt < retries - 1 {
+                    try await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(attempt))) * 1_000_000_000)
+                }
+            }
+        }
+        throw lastError ?? AuthError.tokenRefreshFailed
     }
 
     private func refreshAccessToken(refreshToken: String, accountID: String) async throws -> String {
@@ -305,14 +479,8 @@ final class GoogleAuthService {
     }
 
     private func fetchUserInfo(accessToken: String) async throws -> OAuthUserInfo {
-        let cacheKey = String(accessToken.prefix(32))
-        if let cached = userInfoCache[cacheKey], Date().timeIntervalSince(cached.cachedAt) < userInfoCacheTTL {
-            return cached.userInfo
-        }
-
         var request = URLRequest(url: URL(string: "https://www.googleapis.com/oauth2/v2/userinfo")!)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 15
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -320,9 +488,7 @@ final class GoogleAuthService {
             throw AuthError.userInfoFailed
         }
 
-        let userInfo = try JSONDecoder().decode(OAuthUserInfo.self, from: data)
-        userInfoCache[cacheKey] = (userInfo: userInfo, cachedAt: Date())
-        return userInfo
+        return try JSONDecoder().decode(OAuthUserInfo.self, from: data)
     }
 
     private func saveTokens(accountID: String, response: OAuthTokenResponse) throws {
@@ -337,9 +503,7 @@ final class GoogleAuthService {
 
     private func loadAccounts() {
         guard let data = UserDefaults.standard.data(forKey: "accounts"),
-              let list = try? JSONDecoder().decode([DriveAccount].self, from: data) else {
-            return
-        }
+              let list = try? JSONDecoder().decode([DriveAccount].self, from: data) else { return }
         accounts = list
         activeAccount = list.first { $0.isActive } ?? list.first
     }
@@ -357,7 +521,6 @@ final class GoogleAuthService {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
-            .trimmingCharacters(in: .whitespaces)
     }
 
     private func generateCodeChallenge(from verifier: String) -> String {
@@ -370,36 +533,25 @@ final class GoogleAuthService {
     }
 }
 
-struct StoredToken: Codable {
-    let accessToken: String
-    let refreshToken: String?
-    let expiresAt: Date?
-}
-
 enum AuthError: LocalizedError {
-    case codeVerifierGenerationFailed
-    case invalidAuthURL
-    case invalidCallback
-    case noCodeVerifier
-    case noToken
-    case tokenDecodingFailed
-    case tokenExpired
-    case tokenExchangeFailed
-    case tokenRefreshFailed
-    case userInfoFailed
+    case codeVerifierGenerationFailed, invalidAuthURL, invalidCallback, noCodeVerifier
+    case noToken, tokenDecodingFailed, tokenExpired, tokenExchangeFailed
+    case tokenRefreshFailed, userInfoFailed, userCancelled, serverStartFailed
 
     var errorDescription: String? {
         switch self {
         case .codeVerifierGenerationFailed: return "Failed to generate authentication code"
         case .invalidAuthURL: return "Invalid authentication URL"
-        case .invalidCallback: return "Invalid authentication callback"
+        case .invalidCallback: return "Invalid callback from Google"
         case .noCodeVerifier: return "Authentication state lost"
         case .noToken: return "No saved token found"
         case .tokenDecodingFailed: return "Failed to decode saved token"
         case .tokenExpired: return "Authentication expired. Please reconnect."
-        case .tokenExchangeFailed: return "Failed to complete authentication"
+        case .tokenExchangeFailed: return "Failed to exchange code for token"
         case .tokenRefreshFailed: return "Failed to refresh authentication"
-        case .userInfoFailed: return "Failed to fetch account information"
+        case .userInfoFailed: return "Failed to fetch account info"
+        case .userCancelled: return "Authentication was cancelled"
+        case .serverStartFailed: return "Failed to start local server on port 18923. Is another instance running?"
         }
     }
 }

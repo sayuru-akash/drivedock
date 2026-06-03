@@ -28,6 +28,8 @@ struct AccountSelectorButton: View {
                     Text(account.email)
                         .font(.caption)
                         .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 150)
                 } else {
                     Image(systemName: "person.circle")
                         .font(.system(size: 16))
@@ -45,7 +47,7 @@ struct AccountSelectorButton: View {
         .accessibilityHint("Choose a Google account for uploads")
         .popover(isPresented: $showAccountPopover) {
             AccountPopover()
-                .frame(width: 250)
+                .frame(width: 280)
         }
     }
 }

@@ -73,7 +73,7 @@ struct SettingsView: View {
                 }
                 .tag(SettingsTab.advanced)
         }
-        .frame(width: 550, height: 400)
+        .frame(width: 600, height: 480)
     }
 }
 

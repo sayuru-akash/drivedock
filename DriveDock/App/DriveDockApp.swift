@@ -5,12 +5,15 @@ struct DriveDockApp: App {
     @State private var appState = AppState.shared
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
                 .environment(appState)
                 .frame(minWidth: 900, minHeight: 600)
                 .onAppear {
                     configureAppearance()
+                }
+                .onOpenURL { url in
+                    // OAuth callback handled by local server, not URL scheme
                 }
         }
         .windowStyle(.titleBar)

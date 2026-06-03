@@ -28,17 +28,6 @@
 	<string>NSApplication</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 DriveDock Contributors. MIT License.</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>com.drivedock.app.oauth</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>$(GOOGLE_URL_SCHEME)</string>
-			</array>
-		</dict>
-	</array>
 	<key>GOOGLE_CLIENT_ID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>
 	<key>GOOGLE_CLIENT_SECRET</key>

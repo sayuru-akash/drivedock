@@ -10,6 +10,7 @@ struct DropZoneView: View {
     @State private var droppedFiles: [URL] = []
     @State private var isAnimating = false
     @State private var glowOpacity: Double = 0
+    @State private var selectedDestination: DriveFolder?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -23,7 +24,7 @@ struct DropZoneView: View {
                             isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.3),
                             style: StrokeStyle(lineWidth: 2, dash: [8, 4])
                         )
-                        .frame(width: 320, height: 200)
+                        .frame(width: 360, height: 220)
                         .scaleEffect(isDropTargeted ? 1.02 : 1.0)
                         .shadow(color: Color.accentColor.opacity(glowOpacity), radius: isDropTargeted ? 12 : 0)
                         .animation(.easeInOut(duration: 0.2), value: isDropTargeted)
@@ -67,6 +68,28 @@ struct DropZoneView: View {
                     .accessibilityLabel("Choose a folder to upload")
                 }
 
+                // Destination selector
+                Button {
+                    showDestinationPicker = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: selectedDestination != nil ? "folder.fill" : "folder.badge.gearshape")
+                            .font(.system(size: 14))
+                        Text(selectedDestination?.name ?? "Choose Drive Destination")
+                            .font(.subheadline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: 300)
+                .accessibilityLabel("Choose destination folder in Google Drive")
+
                 Text("Uploads continue safely in the background when enabled.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -85,6 +108,13 @@ struct DropZoneView: View {
         .onChange(of: isDropTargeted) { _, targeted in
             withAnimation(.easeInOut(duration: 0.3)) {
                 glowOpacity = targeted ? 0.5 : 0.3
+            }
+        }
+        .sheet(isPresented: $showDestinationPicker) {
+            if let account = appState.auth.activeAccount {
+                DestinationPickerView(accountID: account.id) { folder in
+                    selectedDestination = folder
+                }
             }
         }
         .fileImporter(
@@ -129,10 +159,13 @@ struct DropZoneView: View {
         guard !files.isEmpty else { return }
 
         if let activeAccount = appState.auth.activeAccount {
+            let destinationID = selectedDestination?.id ?? "root"
+            let destinationName = selectedDestination?.name ?? "My Drive"
+
             let _ = appState.engine.addFiles(
                 files: files,
-                destinationFolderID: "root",
-                destinationFolderName: "My Drive",
+                destinationFolderID: destinationID,
+                destinationFolderName: destinationName,
                 accountID: activeAccount.id
             )
             appState.engine.startProcessing()

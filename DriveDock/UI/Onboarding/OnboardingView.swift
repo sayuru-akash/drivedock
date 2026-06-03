@@ -3,7 +3,6 @@ import SwiftUI
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
     @State private var currentStep: OnboardingStep = .welcome
-    @State private var isAuthenticating = false
     @State private var authError: String?
 
     enum OnboardingStep {
@@ -28,8 +27,9 @@ struct OnboardingView: View {
 
                 case .connecting:
                     ConnectingStep(
-                        isAuthenticating: isAuthenticating,
-                        authError: authError,
+                        isAuthenticating: appState.auth.isAuthenticating,
+                        authError: authError ?? appState.auth.authError,
+                        onCancel: { cancelAuth() },
                         onRetry: { startAuth() },
                         onSkip: { completeOnboarding() }
                     )
@@ -43,31 +43,39 @@ struct OnboardingView: View {
             .animation(.easeInOut(duration: 0.3), value: currentStep)
         }
         .frame(minWidth: 500, minHeight: 400)
+        .onChange(of: appState.auth.accounts.count) { _, newCount in
+            if newCount > 0 && currentStep == .connecting {
+                currentStep = .ready
+            }
+        }
     }
 
     private func startAuth() {
         currentStep = .connecting
-        isAuthenticating = true
         authError = nil
 
         Task {
             do {
-                let url = try await appState.auth.startAuthentication()
-                NSWorkspace.shared.open(url)
-
-                // Wait for callback - in a real app, this is handled by the URL scheme
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                isAuthenticating = false
-
-                // If auth succeeds, move to ready
-                if !appState.auth.accounts.isEmpty {
+                try await appState.auth.startAuthentication()
+                // If we get here, auth completed successfully
+                await MainActor.run {
                     currentStep = .ready
                 }
             } catch {
-                isAuthenticating = false
-                authError = error.localizedDescription
+                await MainActor.run {
+                    if (error as? AuthError) != .userCancelled {
+                        authError = error.localizedDescription
+                    } else {
+                        currentStep = .welcome
+                    }
+                }
             }
         }
+    }
+
+    private func cancelAuth() {
+        appState.auth.cancelAuthentication()
+        currentStep = .welcome
     }
 
     private func completeOnboarding() {
@@ -81,7 +89,6 @@ struct WelcomeStep: View {
     let onConnect: () -> Void
     let onSkip: () -> Void
 
-    @State private var isHovering = false
     @State private var isPulsing = false
 
     var body: some View {
@@ -102,7 +109,6 @@ struct WelcomeStep: View {
                         value: isPulsing
                     )
                     .onAppear { isPulsing = true }
-                    .accessibilityHidden(true)
 
                 Text("DriveDock")
                     .font(.system(size: 36, weight: .bold, design: .rounded))
@@ -128,7 +134,6 @@ struct WelcomeStep: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
-                .accessibilityLabel("Connect Google Drive account")
 
                 Button("Explore without account") {
                     onSkip()
@@ -136,7 +141,6 @@ struct WelcomeStep: View {
                 .buttonStyle(.plain)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .accessibilityLabel("Explore DriveDock without connecting an account")
             }
             .padding(.bottom, 40)
         }
@@ -149,6 +153,7 @@ struct WelcomeStep: View {
 struct ConnectingStep: View {
     let isAuthenticating: Bool
     let authError: String?
+    let onCancel: () -> Void
     let onRetry: () -> Void
     let onSkip: () -> Void
 
@@ -164,18 +169,22 @@ struct ConnectingStep: View {
                     Text("Waiting for Google authorization...")
                         .font(.headline)
 
-                    Text("Complete the sign-in process in your browser.")
+                    Text("Complete the sign-in process in your browser.\nThis window will update automatically.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.top, 8)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Waiting for Google authorization. Complete the sign-in process in your browser.")
             } else if let error = authError {
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 40))
                         .foregroundStyle(.orange)
-                        .accessibilityHidden(true)
 
                     Text("Connection Failed")
                         .font(.headline)
@@ -184,6 +193,7 @@ struct ConnectingStep: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal)
 
                     HStack(spacing: 12) {
                         Button("Try Again") {
@@ -219,13 +229,10 @@ struct ReadyStep: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 64))
                     .foregroundStyle(.green)
-                    .scaleEffect(isAnimating ? 1.1 : 0.9)
-                    .animation(
-                        .easeInOut(duration: 0.6).repeatForever(autoreverses: true),
-                        value: isAnimating
-                    )
+                    .scaleEffect(isAnimating ? 1.0 : 0.5)
+                    .opacity(isAnimating ? 1.0 : 0.0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.6), value: isAnimating)
                     .onAppear { isAnimating = true }
-                    .accessibilityHidden(true)
 
                 Text("You're All Set!")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -245,7 +252,6 @@ struct ReadyStep: View {
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
             .padding(.bottom, 40)
-            .accessibilityLabel("Start using DriveDock")
         }
         .padding(40)
     }
