@@ -1,0 +1,43 @@
+import SwiftUI
+
+struct ContentView: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        @Bindable var state = appState
+
+        if appState.isOnboarding {
+            OnboardingView()
+                .transition(.opacity)
+        } else {
+            NavigationSplitView {
+                SidebarView()
+            } detail: {
+                DetailView()
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    AccountSelectorButton()
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 8) {
+                        Button {
+                            appState.showSettings = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+
+                        Button {
+                            appState.showInspector.toggle()
+                        } label: {
+                            Image(systemName: appState.showInspector ? "sidebar.right" : "sidebar.right")
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $state.showSettings) {
+                SettingsView()
+            }
+        }
+    }
+}

@@ -1,0 +1,652 @@
+import Foundation
+import Combine
+
+enum UploadEngineError: LocalizedError {
+    case itemNotFound
+    case invalidState
+    case sessionExpired
+    case fileReadError
+    case uploadFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .itemNotFound: return "Upload item not found"
+        case .invalidState: return "Upload is in an invalid state"
+        case .sessionExpired: return "Upload session expired"
+        case .fileReadError: return "Could not read the file"
+        case .uploadFailed(let msg): return "Upload failed: \(msg)"
+        }
+    }
+}
+
+@Observable
+final class UploadEngine {
+    static let shared = UploadEngine()
+
+    private let driveAPI = DriveAPIService.shared
+    private let auth = GoogleAuthService.shared
+    private let persistence = PersistenceService.shared
+    private let notifications = NotificationService.shared
+
+    private(set) var items: [UploadItem] = []
+    private(set) var batches: [UploadBatch] = []
+    private(set) var isProcessing = false
+    private(set) var totalSpeed: Double = 0
+    private(set) var activeUploadCount: Int = 0
+
+    private var activeTasks: [String: Task<Void, Never>] = [:]
+    private var speedTrackers: [String: SpeedTracker] = [:]
+
+    private let chunkSize = 8 * 1024 * 1024 // 8MB chunks
+
+    private init() {
+        loadPersistedState()
+    }
+
+    // MARK: - Queue Actions
+
+    func addFiles(
+        files: [LocalFileInfo],
+        destinationFolderID: String,
+        destinationFolderName: String,
+        accountID: String,
+        duplicateHandling: DuplicateMode = .keepBoth,
+        batchName: String? = nil
+    ) -> UploadBatch {
+        let batchID = UUID().uuidString
+        let batch = UploadBatch(
+            id: batchID,
+            name: batchName ?? "Upload \(Date().formatted(date: .abbreviated, time: .shortened))",
+            accountID: accountID,
+            destinationFolderID: destinationFolderID,
+            destinationFolderName: destinationFolderName,
+            status: .preparing,
+            itemIDs: [],
+            createdDate: Date(),
+            totalSize: files.reduce(0) { $0 + $1.fileSize },
+            uploadedSize: 0,
+            duplicateHandling: duplicateHandling,
+            preserveStructure: true
+        )
+
+        var itemIDs: [String] = []
+        for file in files {
+            let item = UploadItem(
+                id: UUID().uuidString,
+                localFileName: file.fileName,
+                localFilePath: file.filePath,
+                fileSize: file.fileSize,
+                mimeType: file.mimeType,
+                destinationFolderID: destinationFolderID,
+                destinationFolderName: destinationFolderName,
+                accountID: accountID,
+                status: .waiting,
+                progress: 0,
+                uploadedBytes: 0,
+                speed: 0,
+                retryCount: 0,
+                createdDate: Date(),
+                lastActivityDate: Date(),
+                isFolder: false,
+                duplicateHandling: duplicateHandling
+            )
+            items.append(item)
+            itemIDs.append(item.id)
+        }
+
+        var updatedBatch = batch
+        updatedBatch.itemIDs = itemIDs
+        updatedBatch.status = .ready
+        batches.append(updatedBatch)
+
+        persistence.saveQueue(items)
+        persistence.saveBatches(batches)
+
+        return updatedBatch
+    }
+
+    func addFolder(
+        folderPath: String,
+        folderName: String,
+        destinationFolderID: String,
+        destinationFolderName: String,
+        accountID: String,
+        duplicateHandling: DuplicateMode = .keepBoth
+    ) async -> UploadBatch {
+        let batchID = UUID().uuidString
+        let fileManager = FileManager.default
+
+        guard let enumerator = fileManager.enumerator(atPath: folderPath) else {
+            let batch = UploadBatch(
+                id: batchID,
+                name: folderName,
+                accountID: accountID,
+                destinationFolderID: destinationFolderID,
+                destinationFolderName: destinationFolderName,
+                status: .failed,
+                itemIDs: [],
+                createdDate: Date(),
+                totalSize: 0,
+                uploadedSize: 0,
+                duplicateHandling: duplicateHandling,
+                preserveStructure: true
+            )
+            batches.append(batch)
+            return batch
+        }
+
+        var files: [LocalFileInfo] = []
+        var totalSize: Int64 = 0
+
+        while let relativePath = enumerator.nextObject() as? String {
+            let fullPath = (folderPath as NSString).appendingPathComponent(relativePath)
+            guard let attrs = try? fileManager.attributesOfItem(atPath: fullPath),
+                  let fileType = attrs[.type] as? FileAttributeType,
+                  fileType == .typeRegular else { continue }
+
+            let fileName = (fullPath as NSString).lastPathComponent
+            if AppSettings.shared.ignoreDSStore && fileName == ".DS_Store" { continue }
+            if AppSettings.shared.ignoreHiddenFiles && fileName.hasPrefix(".") { continue }
+
+            let fileSize = attrs[.size] as? Int64 ?? 0
+            let mimeType = MIMETypeDetector.mimeType(for: fileName)
+
+            files.append(LocalFileInfo(
+                fileName: fileName,
+                filePath: fullPath,
+                fileSize: fileSize,
+                mimeType: mimeType,
+                relativePath: relativePath
+            ))
+            totalSize += fileSize
+        }
+
+        let batch = UploadBatch(
+            id: batchID,
+            name: folderName,
+            accountID: accountID,
+            destinationFolderID: destinationFolderID,
+            destinationFolderName: destinationFolderName,
+            status: .preparing,
+            itemIDs: [],
+            createdDate: Date(),
+            totalSize: totalSize,
+            uploadedSize: 0,
+            duplicateHandling: duplicateHandling,
+            preserveStructure: true
+        )
+
+        var itemIDs: [String] = []
+        for file in files {
+            let item = UploadItem(
+                id: UUID().uuidString,
+                localFileName: file.fileName,
+                localFilePath: file.filePath,
+                fileSize: file.fileSize,
+                mimeType: file.mimeType,
+                destinationFolderID: destinationFolderID,
+                destinationFolderName: destinationFolderName,
+                accountID: accountID,
+                status: .waiting,
+                progress: 0,
+                uploadedBytes: 0,
+                speed: 0,
+                retryCount: 0,
+                createdDate: Date(),
+                lastActivityDate: Date(),
+                isFolder: false,
+                folderPath: file.relativePath,
+                duplicateHandling: duplicateHandling
+            )
+            items.append(item)
+            itemIDs.append(item.id)
+        }
+
+        var updatedBatch = batch
+        updatedBatch.itemIDs = itemIDs
+        updatedBatch.status = .ready
+        batches.append(updatedBatch)
+
+        persistence.saveQueue(items)
+        persistence.saveBatches(batches)
+
+        return updatedBatch
+    }
+
+    // MARK: - Queue Control
+
+    func startProcessing() {
+        guard !isProcessing else { return }
+        isProcessing = true
+        processQueue()
+    }
+
+    func pauseAll() {
+        isProcessing = false
+        for (id, task) in activeTasks {
+            task.cancel()
+            activeTasks.removeValue(forKey: id)
+            if let index = items.firstIndex(where: { $0.id == id }) {
+                items[index].status = .paused
+            }
+        }
+        activeUploadCount = 0
+        updateTotalSpeed()
+        persistence.saveQueue(items)
+    }
+
+    func resumeAll() {
+        for index in items.indices {
+            if items[index].status == .paused {
+                items[index].status = .waiting
+            }
+        }
+        persistence.saveQueue(items)
+        startProcessing()
+    }
+
+    func pauseItem(_ itemID: String) {
+        activeTasks[itemID]?.cancel()
+        activeTasks.removeValue(forKey: itemID)
+
+        if let index = items.firstIndex(where: { $0.id == itemID }) {
+            items[index].status = .paused
+            items[index].speed = 0
+        }
+
+        activeUploadCount = max(0, activeUploadCount - 1)
+        updateTotalSpeed()
+        persistence.saveQueue(items)
+    }
+
+    func resumeItem(_ itemID: String) {
+        if let index = items.firstIndex(where: { $0.id == itemID }) {
+            items[index].status = .waiting
+        }
+        persistence.saveQueue(items)
+        if !isProcessing { startProcessing() }
+    }
+
+    func cancelItem(_ itemID: String) {
+        activeTasks[itemID]?.cancel()
+        activeTasks.removeValue(forKey: itemID)
+
+        if let index = items.firstIndex(where: { $0.id == itemID }) {
+            items[index].status = .cancelled
+            items[index].speed = 0
+        }
+
+        activeUploadCount = max(0, activeUploadCount - 1)
+        updateTotalSpeed()
+        persistence.saveQueue(items)
+    }
+
+    func retryItem(_ itemID: String) {
+        if let index = items.firstIndex(where: { $0.id == itemID }) {
+            items[index].status = .waiting
+            items[index].progress = 0
+            items[index].uploadedBytes = 0
+            items[index].errorMessage = nil
+            items[index].errorCategory = nil
+            items[index].retryCount += 1
+        }
+        persistence.saveQueue(items)
+        if !isProcessing { startProcessing() }
+    }
+
+    func removeItem(_ itemID: String) {
+        activeTasks[itemID]?.cancel()
+        activeTasks.removeValue(forKey: itemID)
+        items.removeAll { $0.id == itemID }
+        for index in batches.indices {
+            batches[index].itemIDs.removeAll { $0 == itemID }
+        }
+        persistence.saveQueue(items)
+        persistence.saveBatches(batches)
+    }
+
+    func clearCompleted() {
+        items.removeAll { $0.status == .completed || $0.status == .cancelled || $0.status == .skipped }
+        persistence.saveQueue(items)
+    }
+
+    func clearFailed() {
+        items.removeAll { $0.status == .failed }
+        persistence.saveQueue(items)
+    }
+
+    func moveItemToFront(_ itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        let item = items.remove(at: index)
+        items.insert(item, at: 0)
+        persistence.saveQueue(items)
+    }
+
+    // MARK: - Queue Processing
+
+    private func processQueue() {
+        Task {
+            while isProcessing {
+                let settings = AppSettings.shared
+                let maxConcurrent = settings.defaultUploadMode.maxConcurrentUploads
+                let activeCount = activeTasks.count
+
+                guard activeCount < maxConcurrent else {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    continue
+                }
+
+                let availableSlots = maxConcurrent - activeCount
+                let waitingItems = items.filter { $0.status == .waiting }.prefix(availableSlots)
+
+                guard !waitingItems.isEmpty else {
+                    let hasWaiting = items.contains { $0.status == .waiting }
+                    let hasActive = !activeTasks.isEmpty
+
+                    if !hasWaiting && !hasActive {
+                        isProcessing = false
+                        notifications.sendBatchCompleteNotification(
+                            completedCount: items.filter { $0.status == .completed }.count,
+                            failedCount: items.filter { $0.status == .failed }.count
+                        )
+                    } else if !hasWaiting && hasActive {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                    } else {
+                        try? await Task.sleep(nanoseconds: 200_000_000)
+                    }
+                    continue
+                }
+
+                for item in waitingItems {
+                    startUpload(item)
+                }
+
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+    }
+
+    private func startUpload(_ item: UploadItem) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        items[index].status = .uploading
+        items[index].lastActivityDate = Date()
+        activeUploadCount += 1
+
+        speedTrackers[item.id] = SpeedTracker()
+
+        let task = Task {
+            await performUpload(itemID: item.id)
+        }
+
+        activeTasks[item.id] = task
+    }
+
+    private func performUpload(itemID: String) async {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+
+        let item = items[index]
+        let fileURL = URL(fileURLWithPath: item.localFilePath)
+
+        guard FileManager.default.fileExists(atPath: item.localFilePath) else {
+            await MainActor.run {
+                self.items[index].status = .failed
+                self.items[index].errorMessage = "Local file not found"
+                self.items[index].errorCategory = .localFileMissing
+                self.activeTasks.removeValue(forKey: itemID)
+                self.activeUploadCount = max(0, self.activeUploadCount - 1)
+                self.speedTrackers.removeValue(forKey: itemID)
+                self.persistence.saveQueue(self.items)
+            }
+            return
+        }
+
+        do {
+            if item.fileSize < 5 * 1024 * 1024 {
+                try await performSimpleUpload(itemID: itemID, fileURL: fileURL)
+            } else {
+                try await performResumableUpload(itemID: itemID, fileURL: fileURL)
+            }
+
+            let link = try? await driveAPI.getFileLink(
+                fileID: items[index].driveFileID ?? "",
+                accountID: item.accountID
+            )
+
+            await MainActor.run {
+                self.items[index].status = .completed
+                self.items[index].progress = 1.0
+                self.items[index].uploadedBytes = item.fileSize
+                self.items[index].completedDate = Date()
+                self.items[index].driveFileLink = link
+                self.items[index].speed = 0
+
+                self.addToHistory(self.items[index])
+
+                if let batchIndex = self.batches.firstIndex(where: { $0.id == item.batchID }) {
+                    self.batches[batchIndex].uploadedSize += item.fileSize
+                }
+
+                self.activeTasks.removeValue(forKey: itemID)
+                self.activeUploadCount = max(0, self.activeUploadCount - 1)
+                self.speedTrackers.removeValue(forKey: itemID)
+                self.updateTotalSpeed()
+                self.persistence.saveQueue(self.items)
+                self.persistence.saveBatches(self.batches)
+            }
+        } catch {
+            await MainActor.run {
+                let errorCategory = self.classifyError(error)
+                self.items[index].status = errorCategory.isRetryable ? .waiting : .failed
+                self.items[index].errorMessage = error.localizedDescription
+                self.items[index].errorCategory = errorCategory
+                self.items[index].speed = 0
+                self.items[index].retryCount += 1
+
+                self.activeTasks.removeValue(forKey: itemID)
+                self.activeUploadCount = max(0, self.activeUploadCount - 1)
+                self.speedTrackers.removeValue(forKey: itemID)
+                self.updateTotalSpeed()
+                self.persistence.saveQueue(self.items)
+
+                if !errorCategory.isRetryable {
+                    self.notifications.sendUploadFailedNotification(
+                        fileName: self.items[index].localFileName,
+                        reason: errorCategory.displayName
+                    )
+                }
+            }
+        }
+    }
+
+    private func performSimpleUpload(itemID: String, fileURL: URL) async throws {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        let item = items[index]
+
+        let fileData = try Data(contentsOf: fileURL)
+        let file = try await driveAPI.simpleUpload(
+            fileData: fileData,
+            fileName: item.localFileName,
+            mimeType: item.mimeType,
+            parentFolderID: item.destinationFolderID,
+            accountID: item.accountID
+        )
+
+        await MainActor.run {
+            self.items[index].driveFileID = file.id
+            self.items[index].driveFileLink = file.webViewLink
+        }
+    }
+
+    private func performResumableUpload(itemID: String, fileURL: URL) async throws {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        let item = items[index]
+
+        let session = try await driveAPI.initiateResumableUpload(
+            fileName: item.localFileName,
+            fileSize: item.fileSize,
+            mimeType: item.mimeType,
+            parentFolderID: item.destinationFolderID,
+            accountID: item.accountID
+        )
+
+        await MainActor.run {
+            self.items[index].resumableSessionURL = session.uploadURL
+        }
+
+        var uploadedBytes: Int64 = 0
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? handle.close() }
+
+        while uploadedBytes < item.fileSize {
+            if Task.isCancelled { throw CancellationError() }
+
+            let remaining = item.fileSize - uploadedBytes
+            let currentChunkSize = min(Int64(chunkSize), remaining)
+
+            handle.seek(toFileOffset: UInt64(uploadedBytes))
+            guard let chunkData = try handle.read(upToCount: Int(currentChunkSize)) else {
+                throw UploadEngineError.fileReadError
+            }
+
+            let result = try await driveAPI.uploadChunk(
+                sessionURL: session.uploadURL,
+                data: chunkData,
+                rangeStart: uploadedBytes,
+                totalSize: item.fileSize
+            )
+
+            uploadedBytes = result.uploadedBytes
+
+            let speed = speedTrackers[itemID]?.addBytes(Int64(chunkData.count)) ?? 0
+            let remainingBytes = item.fileSize - uploadedBytes
+            let eta = speed > 0 ? Double(remainingBytes) / speed : nil
+
+            await MainActor.run {
+                self.items[index].uploadedBytes = uploadedBytes
+                self.items[index].progress = Double(uploadedBytes) / Double(item.fileSize)
+                self.items[index].speed = speed
+                self.items[index].eta = eta
+                self.items[index].lastActivityDate = Date()
+                self.updateTotalSpeed()
+            }
+
+            if result.statusCode == 200 || result.statusCode == 201 {
+                if let data = try? JSONSerialization.jsonObject(with: chunkData) as? [String: Any],
+                   let fileId = data["id"] as? String {
+                    await MainActor.run {
+                        self.items[index].driveFileID = fileId
+                    }
+                }
+                break
+            }
+        }
+    }
+
+    // MARK: - Error Classification
+
+    private func classifyError(_ error: Error) -> ErrorCategory {
+        if let apiError = error as? DriveAPIError {
+            switch apiError {
+            case .networkUnavailable: return .network
+            case .rateLimited: return .quotaRateLimit
+            case .authenticationRequired: return .authentication
+            case .permissionDenied: return .permission
+            case .notFound: return .destinationMissing
+            case .quotaExceeded: return .storageQuotaExceeded
+            case .httpError(let code, _):
+                if code == 429 { return .quotaRateLimit }
+                if code >= 500 { return .network }
+                return .unknown
+            default: return .unknown
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            return .network
+        }
+
+        return .unknown
+    }
+
+    // MARK: - Speed & Stats
+
+    private func updateTotalSpeed() {
+        totalSpeed = items.filter { $0.status == .uploading }.reduce(0) { $0 + $1.speed }
+    }
+
+    var overallProgress: Double {
+        let totalSize = items.reduce(Int64(0)) { $0 + $1.fileSize }
+        let uploadedSize = items.reduce(Int64(0)) { $0 + $1.uploadedBytes }
+        guard totalSize > 0 else { return 0 }
+        return Double(uploadedSize) / Double(totalSize)
+    }
+
+    var waitingCount: Int { items.filter { $0.status == .waiting }.count }
+    var completedCount: Int { items.filter { $0.status == .completed }.count }
+    var failedCount: Int { items.filter { $0.status == .failed }.count }
+    var pausedCount: Int { items.filter { $0.status == .paused }.count }
+
+    // MARK: - History
+
+    private func addToHistory(_ item: UploadItem) {
+        let entry = UploadHistoryEntry(
+            id: UUID().uuidString,
+            fileName: item.localFileName,
+            fileSize: item.fileSize,
+            accountEmail: auth.accounts.first { $0.id == item.accountID }?.email ?? "",
+            destinationFolderName: item.destinationFolderName,
+            destinationFolderID: item.destinationFolderID,
+            status: item.status,
+            startedDate: item.createdDate,
+            completedDate: item.completedDate,
+            duration: item.completedDate?.timeIntervalSince(item.createdDate),
+            averageSpeed: item.speed,
+            driveFileLink: item.driveFileLink,
+            batchID: item.batchID,
+            isFolder: item.isFolder
+        )
+        persistence.addHistoryEntry(entry)
+    }
+
+    // MARK: - Persistence
+
+    private func loadPersistedState() {
+        items = persistence.loadQueue()
+        batches = persistence.loadBatches()
+    }
+
+    func saveState() {
+        persistence.saveQueue(items)
+        persistence.saveBatches(batches)
+    }
+}
+
+// MARK: - Speed Tracker
+
+final class SpeedTracker {
+    private var bytesPerSecond: [Date: Int64] = [:]
+    private let windowDuration: TimeInterval = 5
+
+    func addBytes(_ bytes: Int64) -> Double {
+        let now = Date()
+        bytesPerSecond[now] = bytes
+
+        let cutoff = now.addingTimeInterval(-windowDuration)
+        bytesPerSecond = bytesPerSecond.filter { $0.key > cutoff }
+
+        guard !bytesPerSecond.isEmpty else { return 0 }
+        let totalBytes = bytesPerSecond.values.reduce(0, +)
+        let timeSpan = now.timeIntervalSince(bytesPerSecond.keys.min() ?? now)
+        guard timeSpan > 0 else { return 0 }
+        return Double(totalBytes) / timeSpan
+    }
+}
+
+struct LocalFileInfo {
+    let fileName: String
+    let filePath: String
+    let fileSize: Int64
+    let mimeType: String
+    let relativePath: String?
+}
