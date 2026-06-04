@@ -57,12 +57,12 @@ final class DownloadEngine {
         fileSize: Int64,
         accountID: String
     ) {
-        // Get or request download folder permission
-        guard let downloadFolder = DownloadFolderManager.shared.requestDownloadFolder() else {
-            return
-        }
-        
+        // Use Downloads folder directly - guaranteed by entitlements
+        let downloadFolder = DownloadFolderManager.shared.downloadFolder
         let saveURL = downloadFolder.appendingPathComponent(fileName)
+        
+        print("[Download] Adding file: \(fileName)")
+        print("[Download] Save path: \(saveURL.path)")
         
         let item = DownloadItem(
             id: UUID().uuidString,
@@ -90,10 +90,11 @@ final class DownloadEngine {
         folderName: String,
         accountID: String
     ) {
-        // Get or request download folder permission
-        guard let downloadFolder = DownloadFolderManager.shared.requestDownloadFolder() else {
-            return
-        }
+        // Use Downloads folder directly - guaranteed by entitlements
+        let downloadFolder = DownloadFolderManager.shared.downloadFolder
+        
+        print("[Download] Adding folder: \(folderName)")
+        print("[Download] Save path: \(downloadFolder.appendingPathComponent(folderName).path)")
         
         Task {
             await addFolder(
@@ -433,10 +434,16 @@ final class DownloadEngine {
         let localURL = URL(fileURLWithPath: item.localPath)
         let parentDir = localURL.deletingLastPathComponent()
 
+        print("[Download] Starting download: \(item.fileName)")
+        print("[Download] Target path: \(item.localPath)")
+        print("[Download] File size: \(item.fileSize)")
+
         // Ensure parent directory exists
         do {
             try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true, attributes: nil)
+            print("[Download] Directory created: \(parentDir.path)")
         } catch {
+            print("[Download] ERROR creating directory: \(error)")
             await MainActor.run {
                 self.items[index].status = .failed
                 self.items[index].error = "Cannot create folder: \(error.localizedDescription)"
@@ -452,6 +459,7 @@ final class DownloadEngine {
         if FileManager.default.fileExists(atPath: item.localPath) {
             let existingSize = (try? FileManager.default.attributesOfItem(atPath: item.localPath)[FileAttributeKey.size] as? Int64) ?? 0
             if existingSize == item.fileSize && item.fileSize > 0 {
+                print("[Download] File already exists with same size, skipping")
                 await MainActor.run {
                     self.items[index].status = .completed
                     self.items[index].progress = 1.0
@@ -469,10 +477,12 @@ final class DownloadEngine {
         }
 
         do {
+            print("[Download] Getting download URL for file: \(item.driveFileID)")
             let downloadURL = try await driveAPI.getDownloadURL(
                 fileID: item.driveFileID,
                 accountID: item.accountID
             )
+            print("[Download] Got download URL: \(downloadURL)")
 
             let downloadedPath = try await performHTTPDownload(
                 itemID: itemID,
@@ -484,6 +494,7 @@ final class DownloadEngine {
 
             let finalAttributes = try FileManager.default.attributesOfItem(atPath: downloadedPath)
             let finalSize = finalAttributes[FileAttributeKey.size] as? Int64 ?? 0
+            print("[Download] Download complete. Final size: \(finalSize)")
 
             await MainActor.run {
                 self.items[index].status = .completed
@@ -500,6 +511,7 @@ final class DownloadEngine {
                 self.persistence.saveDownloadQueue(self.items)
             }
         } catch {
+            print("[Download] ERROR: \(error)")
             await MainActor.run {
                 self.items[index].status = .failed
                 self.items[index].error = error.localizedDescription
@@ -532,22 +544,34 @@ final class DownloadEngine {
         let accessToken = try await auth.getAccessToken(for: accountID)
         let fileManager = FileManager.default
         
+        print("[HTTP] Starting download from: \(url)")
+        print("[HTTP] Saving to: \(localURL.path)")
+        
         // Use temp directory for downloading
         let tempDir = fileManager.temporaryDirectory
         let tempFileName = UUID().uuidString + "_" + localURL.lastPathComponent
         let tempURL = tempDir.appendingPathComponent(tempFileName)
+        print("[HTTP] Temp file: \(tempURL.path)")
 
         // Build request
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 300
         
         // For small files (< 1MB), use simple data download
         if expectedSize < 1_000_000 {
+            print("[HTTP] Using simple download for small file")
             let (data, response) = try await URLSession.shared.data(for: request)
             
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode >= 200 && httpResponse.statusCode < 400 else {
-                throw DownloadEngineError.downloadFailed("Download failed")
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw DownloadEngineError.downloadFailed("Invalid response")
+            }
+            
+            print("[HTTP] Response status: \(httpResponse.statusCode)")
+            print("[HTTP] Data size: \(data.count) bytes")
+            
+            guard httpResponse.statusCode >= 200 && httpResponse.statusCode < 400 else {
+                throw DownloadEngineError.downloadFailed("HTTP \(httpResponse.statusCode)")
             }
             
             // Write directly to final location
@@ -555,6 +579,7 @@ final class DownloadEngine {
                 try? fileManager.removeItem(at: localURL)
             }
             try data.write(to: localURL)
+            print("[HTTP] Written \(data.count) bytes to \(localURL.path)")
             
             await MainActor.run {
                 self.items[index].downloadedBytes = Int64(data.count)
@@ -567,24 +592,11 @@ final class DownloadEngine {
         }
         
         // For larger files, use streaming download
-        var resumeOffset: Int64 = 0
-
-        if fileManager.fileExists(atPath: tempURL.path) {
-            let attrs = try? fileManager.attributesOfItem(atPath: tempURL.path)
-            resumeOffset = attrs?[FileAttributeKey.size] as? Int64 ?? 0
-            if resumeOffset > 0 {
-                await MainActor.run {
-                    self.items[index].downloadedBytes = resumeOffset
-                    if expectedSize > 0 {
-                        self.items[index].progress = Double(resumeOffset) / Double(expectedSize)
-                    }
-                }
-            }
-        }
-
-        if resumeOffset > 0 {
-            request.setValue("bytes=\(resumeOffset)-", forHTTPHeaderField: "Range")
-        }
+        print("[HTTP] Using streaming download for large file")
+        
+        fileManager.createFile(atPath: tempURL.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: tempURL)
+        defer { try? handle.close() }
 
         let (asyncBytes, response) = try await URLSession.shared.bytes(for: request)
 
@@ -592,22 +604,13 @@ final class DownloadEngine {
             throw DownloadEngineError.downloadFailed("Invalid response")
         }
 
+        print("[HTTP] Response status: \(httpResponse.statusCode)")
+        
         guard httpResponse.statusCode >= 200 && httpResponse.statusCode < 400 else {
             throw DriveAPIError.httpError(statusCode: httpResponse.statusCode, message: nil)
         }
 
-        let handle: FileHandle
-        if resumeOffset > 0 && (httpResponse.statusCode == 206 || httpResponse.statusCode == 200) {
-            handle = try FileHandle(forWritingTo: tempURL)
-            handle.seekToEndOfFile()
-        } else {
-            resumeOffset = 0
-            fileManager.createFile(atPath: tempURL.path, contents: nil)
-            handle = try FileHandle(forWritingTo: tempURL)
-        }
-        defer { try? handle.close() }
-
-        var bytesWritten: Int64 = resumeOffset
+        var bytesWritten: Int64 = 0
         var chunkBuffer = Data()
         let flushThreshold = 64 * 1024
 
@@ -650,12 +653,16 @@ final class DownloadEngine {
         // Ensure data is flushed to disk
         handle.synchronizeFile()
         try? handle.close()
+        
+        print("[HTTP] Download complete. Total bytes: \(bytesWritten)")
 
         // Move from temp to final destination
         if fileManager.fileExists(atPath: localURL.path) {
             try? fileManager.removeItem(at: localURL)
         }
         try fileManager.moveItem(at: tempURL, to: localURL)
+        
+        print("[HTTP] Moved to final location: \(localURL.path)")
 
         return localURL.path
     }

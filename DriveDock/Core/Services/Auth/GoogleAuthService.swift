@@ -192,8 +192,7 @@ final class GoogleAuthService {
     private let redirectURI = "http://127.0.0.1:18923/oauth2callback"
 
     private let scopes = [
-        "https://www.googleapis.com/auth/drive.file",
-        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive",
         "https://www.googleapis.com/auth/userinfo.email",
         "https://www.googleapis.com/auth/userinfo.profile"
     ]

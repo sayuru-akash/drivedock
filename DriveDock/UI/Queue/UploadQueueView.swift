@@ -106,10 +106,11 @@ struct UploadQueueView: View {
     }
 
     private func removeSelectedItems() {
-        for itemID in selectedItems {
+        let idsToRemove = selectedItems
+        selectedItems.removeAll()
+        for itemID in idsToRemove {
             appState.engine.removeItem(itemID)
         }
-        selectedItems.removeAll()
     }
 
     private func fileIcon(for mimeType: String) -> String {
@@ -157,6 +158,7 @@ struct ItemContextMenu: View {
         }
 
         Button("Remove") {
+            appState.selectedUploadItemID = nil
             appState.engine.removeItem(item.id)
         }
 

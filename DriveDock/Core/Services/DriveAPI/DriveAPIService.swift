@@ -651,6 +651,23 @@ final class DriveAPIService {
     func getDownloadURL(fileID: String, accountID: String) async throws -> URL {
         let accessToken = try await auth.getAccessToken(for: accountID)
 
+        // First, check if the file exists and get its metadata
+        var metaComponents = URLComponents(string: "\(baseURL)/files/\(fileID)")!
+        metaComponents.queryItems = [
+            URLQueryItem(name: "fields", value: "id,name,mimeType,size"),
+            URLQueryItem(name: "supportsAllDrives", value: "true")
+        ]
+
+        guard let metaURL = metaComponents.url else { throw DriveAPIError.invalidResponse }
+
+        var metaRequest = URLRequest(url: metaURL)
+        metaRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        metaRequest.timeoutInterval = requestTimeout
+
+        let (metaData, metaResponse) = try await session.data(for: metaRequest)
+        try validateResponse(metaResponse)
+
+        // Build the download URL directly
         var components = URLComponents(string: "\(baseURL)/files/\(fileID)")!
         components.queryItems = [
             URLQueryItem(name: "alt", value: "media"),
@@ -659,19 +676,7 @@ final class DriveAPIService {
 
         guard let url = components.url else { throw DriveAPIError.invalidResponse }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = requestTimeout
-
-        let (_, response) = try await session.data(for: request)
-        try validateResponse(response)
-
-        guard let responseURL = response.url else {
-            throw DriveAPIError.invalidResponse
-        }
-
-        return responseURL
+        return url
     }
 
     func getFileMetadata(fileID: String, accountID: String) async throws -> DriveAPIListResponse.DriveAPIFile {
