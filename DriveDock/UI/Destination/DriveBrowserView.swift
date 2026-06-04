@@ -644,42 +644,26 @@ struct DriveFileRow: View {
     private func downloadFile() {
         guard let account = appState.auth.activeAccount else { return }
         
-        // Use default Downloads folder - no picker needed for simple downloads
-        let downloadsFolder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
-        
-        appState.downloadEngine.addFile(
+        // Opens save panel - user picks location, gets sandbox permission
+        appState.downloadEngine.downloadFileWithSavePanel(
             driveFileID: item.id,
             fileName: item.name,
             fileSize: item.size ?? 0,
-            localDirectory: downloadsFolder,
             accountID: account.id
         )
-        appState.downloadEngine.startProcessing()
-        
-        // Switch to Downloads view
         appState.selectedSidebarItem = .downloads
     }
 
     private func downloadFolder() {
         guard let account = appState.auth.activeAccount else { return }
         
-        // Use default Downloads folder
-        let downloadsFolder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
-        
-        Task {
-            await appState.downloadEngine.addFolder(
-                driveFolderID: item.id,
-                folderName: item.name,
-                localDirectory: downloadsFolder,
-                accountID: account.id
-            )
-            appState.downloadEngine.startProcessing()
-            
-            // Switch to Downloads view
-            await MainActor.run {
-                appState.selectedSidebarItem = .downloads
-            }
-        }
+        // Opens folder picker - user picks location, gets sandbox permission
+        appState.downloadEngine.downloadFolderWithPicker(
+            driveFolderID: item.id,
+            folderName: item.name,
+            accountID: account.id
+        )
+        appState.selectedSidebarItem = .downloads
     }
 
     private var icon: String {

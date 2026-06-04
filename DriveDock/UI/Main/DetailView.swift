@@ -14,20 +14,12 @@ struct DetailView: View {
                 FilteredQueueView(statusFilter: statusFilter)
             case .myDrive:
                 DriveBrowserView()
-            case .sharedDrives:
-                DriveBrowserView()
-            case .recentFiles:
-                DriveBrowserView()
-            case .starredFiles:
-                DriveBrowserView()
-            case .recentDestinations:
-                RecentDestinationsView()
-            case .starredDestinations:
-                StarredDestinationsView()
             case .history:
                 HistoryView()
             case .settings:
                 SettingsView()
+            default:
+                UploadsOverviewView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -73,20 +73,26 @@ final class PersistenceService {
     // MARK: - History
 
     func addHistoryEntry(_ entry: UploadHistoryEntry) {
-        var history = loadHistory()
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
+        var history = loadHistoryInternal()
         history.insert(entry, at: 0)
 
         if history.count > 1000 {
             history = Array(history.prefix(1000))
         }
 
-        saveHistory(history)
+        saveHistoryInternal(history)
     }
 
     func loadHistory() -> [UploadHistoryEntry] {
         fileLock.lock()
         defer { fileLock.unlock() }
+        return loadHistoryInternal()
+    }
 
+    private func loadHistoryInternal() -> [UploadHistoryEntry] {
         let url = appSupportURL.appendingPathComponent("history.json")
         guard let data = try? Data(contentsOf: url) else { return [] }
         return (try? JSONDecoder().decode([UploadHistoryEntry].self, from: data)) ?? []
@@ -95,7 +101,10 @@ final class PersistenceService {
     func saveHistory(_ entries: [UploadHistoryEntry]) {
         fileLock.lock()
         defer { fileLock.unlock() }
+        saveHistoryInternal(entries)
+    }
 
+    private func saveHistoryInternal(_ entries: [UploadHistoryEntry]) {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         let url = appSupportURL.appendingPathComponent("history.json")
 
@@ -328,6 +337,50 @@ final class PersistenceService {
         guard fileManager.fileExists(atPath: url.path) else { return true }
         guard let data = try? Data(contentsOf: url) else { return false }
         return (try? JSONDecoder().decode(type, from: data)) != nil
+    }
+
+    // MARK: - Download Persistence
+
+    func saveDownloadQueue(_ items: [DownloadItem]) {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
+        guard let data = try? JSONEncoder().encode(items) else { return }
+        let url = appSupportURL.appendingPathComponent("download_queue.json")
+
+        guard hasSufficientDiskSpace(for: data.count) else { return }
+        createBackup(for: url)
+        try? data.write(to: url)
+    }
+
+    func loadDownloadQueue() -> [DownloadItem] {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
+        let url = appSupportURL.appendingPathComponent("download_queue.json")
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        return (try? JSONDecoder().decode([DownloadItem].self, from: data)) ?? []
+    }
+
+    func saveDownloadBatches(_ batches: [DownloadBatch]) {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
+        guard let data = try? JSONEncoder().encode(batches) else { return }
+        let url = appSupportURL.appendingPathComponent("download_batches.json")
+
+        guard hasSufficientDiskSpace(for: data.count) else { return }
+        createBackup(for: url)
+        try? data.write(to: url)
+    }
+
+    func loadDownloadBatches() -> [DownloadBatch] {
+        fileLock.lock()
+        defer { fileLock.unlock() }
+
+        let url = appSupportURL.appendingPathComponent("download_batches.json")
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        return (try? JSONDecoder().decode([DownloadBatch].self, from: data)) ?? []
     }
 
     enum ExportFormat {

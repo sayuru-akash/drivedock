@@ -23,7 +23,7 @@ struct SidebarView: View {
             }
 
             Section("Google Drive") {
-                ForEach([SidebarItem.myDrive, .sharedDrives, .recentFiles, .starredFiles], id: \.self) { item in
+                ForEach([SidebarItem.myDrive], id: \.self) { item in
                     Label(item.displayName, systemImage: item.systemImage)
                         .tag(item)
                 }

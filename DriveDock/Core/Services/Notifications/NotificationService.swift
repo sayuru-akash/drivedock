@@ -251,4 +251,63 @@ final class NotificationService {
             }
         }
     }
+
+    // MARK: - Download Notifications
+
+    func sendDownloadBatchCompleteNotification(completedCount: Int, failedCount: Int) {
+        let settings = AppSettings.shared
+        guard settings.notificationPreference != .disabled else { return }
+        guard permissionGranted else { return }
+
+        let content = UNMutableNotificationContent()
+        content.sound = .default
+
+        if failedCount == 0 {
+            content.title = "Download Complete"
+            content.body = completedCount == 1
+                ? "Your file has been downloaded."
+                : "All \(completedCount) files have been downloaded."
+        } else if completedCount > 0 {
+            content.title = "Download Partially Complete"
+            content.body = "\(completedCount) files downloaded. \(failedCount) files need attention."
+        } else {
+            content.title = "Download Failed"
+            content.body = "\(failedCount) files failed to download."
+        }
+
+        let request = UNNotificationRequest(
+            identifier: "download-batch-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        UNUserNotificationCenter.current().add(request) { [weak self] error in
+            if let error {
+                self?.handleNotificationError(error)
+            }
+        }
+    }
+
+    func sendDownloadFailedNotification(fileName: String, reason: String) {
+        let settings = AppSettings.shared
+        guard settings.notifyOnErrors else { return }
+        guard permissionGranted else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Download Failed"
+        content.body = "\(fileName): \(reason)"
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "download-failed-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        UNUserNotificationCenter.current().add(request) { [weak self] error in
+            if let error {
+                self?.handleNotificationError(error)
+            }
+        }
+    }
 }

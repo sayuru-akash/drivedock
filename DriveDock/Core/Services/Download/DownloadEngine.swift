@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import UserNotifications
 
 enum DownloadEngineError: LocalizedError {
@@ -9,6 +10,7 @@ enum DownloadEngineError: LocalizedError {
     case cannotCreateDirectory(String)
     case cannotWriteFile(String)
     case fileAlreadyExists(String)
+    case permissionDenied(String)
 
     var errorDescription: String? {
         switch self {
@@ -19,6 +21,7 @@ enum DownloadEngineError: LocalizedError {
         case .cannotCreateDirectory(let path): return "Cannot create directory: \(path)"
         case .cannotWriteFile(let path): return "Cannot write to: \(path)"
         case .fileAlreadyExists(let path): return "File already exists: \(path)"
+        case .permissionDenied(let msg): return "Permission denied: \(msg)"
         }
     }
 }
@@ -41,26 +44,79 @@ final class DownloadEngine {
 
     private var activeTasks: [String: Task<Void, Never>] = [:]
     private var speedTrackers: [String: SpeedTracker] = [:]
-    private var urlSessionDelegates: [String: DownloadSessionDelegate] = [:]
-    private var urlSessions: [String: URLSession] = [:]
 
     private init() {
         loadPersistedState()
     }
 
-    // MARK: - Single File Download
+    // MARK: - Download with Save Panel
+
+    func downloadFileWithSavePanel(
+        driveFileID: String,
+        fileName: String,
+        fileSize: Int64,
+        accountID: String
+    ) {
+        // Get or request download folder permission
+        guard let downloadFolder = DownloadFolderManager.shared.requestDownloadFolder() else {
+            return
+        }
+        
+        let saveURL = downloadFolder.appendingPathComponent(fileName)
+        
+        let item = DownloadItem(
+            id: UUID().uuidString,
+            fileName: fileName,
+            driveFileID: driveFileID,
+            localPath: saveURL.path,
+            fileSize: fileSize,
+            downloadedBytes: 0,
+            progress: 0,
+            speed: 0,
+            status: .waiting,
+            accountID: accountID,
+            createdDate: Date(),
+            lastActivityDate: Date(),
+            batchID: nil,
+            isFolder: false
+        )
+        items.append(item)
+        persistence.saveDownloadQueue(items)
+        startProcessing()
+    }
+
+    func downloadFolderWithPicker(
+        driveFolderID: String,
+        folderName: String,
+        accountID: String
+    ) {
+        // Get or request download folder permission
+        guard let downloadFolder = DownloadFolderManager.shared.requestDownloadFolder() else {
+            return
+        }
+        
+        Task {
+            await addFolder(
+                driveFolderID: driveFolderID,
+                folderName: folderName,
+                localDirectory: downloadFolder,
+                accountID: accountID
+            )
+            startProcessing()
+        }
+    }
+
+    // MARK: - Single File Download (internal)
 
     func addFile(
         driveFileID: String,
         fileName: String,
         fileSize: Int64,
-        localDirectory: URL? = nil,
+        localDirectory: URL,
         accountID: String,
         batchID: String? = nil
     ) -> DownloadItem {
-        // Use Downloads folder if no directory specified
-        let targetDir = localDirectory ?? defaultDownloadsDirectory()
-        let localPath = targetDir.appendingPathComponent(fileName).path
+        let localPath = localDirectory.appendingPathComponent(fileName).path
         
         let item = DownloadItem(
             id: UUID().uuidString,
@@ -81,11 +137,6 @@ final class DownloadEngine {
         items.append(item)
         persistence.saveDownloadQueue(items)
         return item
-    }
-
-    private func defaultDownloadsDirectory() -> URL {
-        FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first 
-            ?? FileManager.default.temporaryDirectory
     }
 
     // MARK: - Folder Download
@@ -112,7 +163,7 @@ final class DownloadEngine {
 
         do {
             let folderURL = localDirectory.appendingPathComponent(folderName)
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true, attributes: nil)
 
             let allFiles = try await listAllFilesRecursively(
                 folderID: driveFolderID,
@@ -234,12 +285,8 @@ final class DownloadEngine {
         for (id, task) in activeTasks {
             task.cancel()
             activeTasks.removeValue(forKey: id)
-            urlSessions[id]?.invalidateAndCancel()
-            urlSessions.removeValue(forKey: id)
-            urlSessionDelegates.removeValue(forKey: id)
             if let index = items.firstIndex(where: { $0.id == id }) {
                 items[index].status = .paused
-                items[index].speed = 0
             }
         }
         activeDownloadCount = 0
@@ -260,9 +307,6 @@ final class DownloadEngine {
     func pauseItem(_ itemID: String) {
         activeTasks[itemID]?.cancel()
         activeTasks.removeValue(forKey: itemID)
-        urlSessions[itemID]?.invalidateAndCancel()
-        urlSessions.removeValue(forKey: itemID)
-        urlSessionDelegates.removeValue(forKey: itemID)
 
         if let index = items.firstIndex(where: { $0.id == itemID }) {
             items[index].status = .paused
@@ -285,9 +329,6 @@ final class DownloadEngine {
     func cancelItem(_ itemID: String) {
         activeTasks[itemID]?.cancel()
         activeTasks.removeValue(forKey: itemID)
-        urlSessions[itemID]?.invalidateAndCancel()
-        urlSessions.removeValue(forKey: itemID)
-        urlSessionDelegates.removeValue(forKey: itemID)
 
         if let index = items.firstIndex(where: { $0.id == itemID }) {
             items[index].status = .cancelled
@@ -313,15 +354,8 @@ final class DownloadEngine {
     func removeItem(_ itemID: String) {
         activeTasks[itemID]?.cancel()
         activeTasks.removeValue(forKey: itemID)
-        urlSessions[itemID]?.invalidateAndCancel()
-        urlSessions.removeValue(forKey: itemID)
-        urlSessionDelegates.removeValue(forKey: itemID)
         items.removeAll { $0.id == itemID }
-        for index in batches.indices {
-            batches[index].itemIDs.removeAll { $0 == itemID }
-        }
         persistence.saveDownloadQueue(items)
-        persistence.saveDownloadBatches(batches)
     }
 
     func clearCompleted() {
@@ -339,8 +373,7 @@ final class DownloadEngine {
     private func processQueue() {
         Task {
             while isProcessing {
-                let settings = AppSettings.shared
-                let maxConcurrent = settings.defaultUploadMode.maxConcurrentUploads
+                let maxConcurrent = 3
                 let activeCount = activeTasks.count
 
                 guard activeCount < maxConcurrent else {
@@ -459,17 +492,7 @@ final class DownloadEngine {
                 self.items[index].fileSize = finalSize
                 self.items[index].completedDate = Date()
                 self.items[index].speed = 0
-                self.activeTasks.removeValue(forKey: itemID)
-                self.activeDownloadCount = max(0, self.activeDownloadCount - 1)
-                self.speedTrackers.removeValue(forKey: itemID)
-                self.updateTotalSpeed()
-                self.persistence.saveDownloadQueue(self.items)
-                self.persistence.saveDownloadBatches(self.batches)
-            }
-        } catch is CancellationError {
-            await MainActor.run {
-                self.items[index].status = .paused
-                self.items[index].speed = 0
+
                 self.activeTasks.removeValue(forKey: itemID)
                 self.activeDownloadCount = max(0, self.activeDownloadCount - 1)
                 self.speedTrackers.removeValue(forKey: itemID)
@@ -486,6 +509,7 @@ final class DownloadEngine {
                 self.speedTrackers.removeValue(forKey: itemID)
                 self.updateTotalSpeed()
                 self.persistence.saveDownloadQueue(self.items)
+
                 self.notifications.sendDownloadFailedNotification(
                     fileName: self.items[index].fileName,
                     reason: error.localizedDescription
@@ -506,10 +530,44 @@ final class DownloadEngine {
         }
 
         let accessToken = try await auth.getAccessToken(for: accountID)
-
-        var resumeOffset: Int64 = 0
-        let tempURL = localURL.appendingPathExtension("download")
         let fileManager = FileManager.default
+        
+        // Use temp directory for downloading
+        let tempDir = fileManager.temporaryDirectory
+        let tempFileName = UUID().uuidString + "_" + localURL.lastPathComponent
+        let tempURL = tempDir.appendingPathComponent(tempFileName)
+
+        // Build request
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        
+        // For small files (< 1MB), use simple data download
+        if expectedSize < 1_000_000 {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode >= 200 && httpResponse.statusCode < 400 else {
+                throw DownloadEngineError.downloadFailed("Download failed")
+            }
+            
+            // Write directly to final location
+            if fileManager.fileExists(atPath: localURL.path) {
+                try? fileManager.removeItem(at: localURL)
+            }
+            try data.write(to: localURL)
+            
+            await MainActor.run {
+                self.items[index].downloadedBytes = Int64(data.count)
+                self.items[index].progress = 1.0
+                self.items[index].speed = 0
+                self.updateTotalSpeed()
+            }
+            
+            return localURL.path
+        }
+        
+        // For larger files, use streaming download
+        var resumeOffset: Int64 = 0
 
         if fileManager.fileExists(atPath: tempURL.path) {
             let attrs = try? fileManager.attributesOfItem(atPath: tempURL.path)
@@ -524,8 +582,6 @@ final class DownloadEngine {
             }
         }
 
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         if resumeOffset > 0 {
             request.setValue("bytes=\(resumeOffset)-", forHTTPHeaderField: "Range")
         }
@@ -585,15 +641,19 @@ final class DownloadEngine {
             }
         }
 
+        // Write remaining buffer
         if !chunkBuffer.isEmpty {
             handle.write(chunkBuffer)
             bytesWritten += Int64(chunkBuffer.count)
         }
-
+        
+        // Ensure data is flushed to disk
+        handle.synchronizeFile()
         try? handle.close()
 
+        // Move from temp to final destination
         if fileManager.fileExists(atPath: localURL.path) {
-            try fileManager.removeItem(at: localURL)
+            try? fileManager.removeItem(at: localURL)
         }
         try fileManager.moveItem(at: tempURL, to: localURL)
 
@@ -628,176 +688,5 @@ final class DownloadEngine {
     func saveState() {
         persistence.saveDownloadQueue(items)
         persistence.saveDownloadBatches(batches)
-    }
-}
-
-// MARK: - URLSession Delegate for Download Progress
-
-private final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
-    let itemID: String
-    let progressHandler: (Int64, Double) -> Void
-    let completionHandler: (Result<String, Error>) -> Void
-    private var resumeData: Data?
-
-    init(
-        itemID: String,
-        progressHandler: @escaping (Int64, Double) -> Void,
-        completionHandler: @escaping (Result<String, Error>) -> Void
-    ) {
-        self.itemID = itemID
-        self.progressHandler = progressHandler
-        self.completionHandler = completionHandler
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didFinishDownloadingTo location: URL
-    ) {
-        let destination = downloadTask.originalRequest?.url?.path ?? location.path
-        let destinationURL = URL(fileURLWithPath: destination + ".download")
-
-        do {
-            if FileManager.default.fileExists(atPath: destinationURL.path) {
-                try FileManager.default.removeItem(at: destinationURL)
-            }
-            try FileManager.default.moveItem(at: location, to: destinationURL)
-            completionHandler(.success(destinationURL.path))
-        } catch {
-            completionHandler(.failure(error))
-        }
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didWriteData bytesWritten: Int64,
-        totalBytesWritten: Int64,
-        totalBytesExpectedToWrite: Int64
-    ) {
-        let progress = totalBytesExpectedToWrite > 0
-            ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
-            : 0
-        progressHandler(totalBytesWritten, progress)
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        didCompleteWithError error: Error?
-    ) {
-        if let error {
-            if (error as NSError).code == NSURLErrorCancelled {
-                resumeData = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data
-            }
-            completionHandler(.failure(error))
-        }
-    }
-}
-
-// MARK: - NotificationService extension for downloads
-
-extension NotificationService {
-    func sendDownloadBatchCompleteNotification(completedCount: Int, failedCount: Int) {
-        let settings = AppSettings.shared
-        guard settings.notificationPreference != .disabled else { return }
-        guard permissionGranted else { return }
-
-        let content = UNMutableNotificationContent()
-        content.sound = .default
-
-        if failedCount == 0 {
-            content.title = "Download Complete"
-            content.body = completedCount == 1
-                ? "Your file has been downloaded successfully."
-                : "All \(completedCount) files have been downloaded successfully."
-        } else if completedCount > 0 {
-            content.title = "Download Partially Complete"
-            content.body = "\(completedCount) files downloaded. \(failedCount) files need attention."
-        } else {
-            content.title = "Download Failed"
-            content.body = "\(failedCount) files failed to download."
-        }
-
-        let request = UNNotificationRequest(
-            identifier: "download-batch-complete-\(UUID().uuidString)",
-            content: content,
-            trigger: nil
-        )
-
-        UNUserNotificationCenter.current().add(request) { [weak self] error in
-            if let error {
-                self?.handleNotificationError(error)
-            }
-        }
-    }
-
-    func sendDownloadFailedNotification(fileName: String, reason: String) {
-        let settings = AppSettings.shared
-        guard settings.notifyOnErrors else { return }
-        guard permissionGranted else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = "Download Failed"
-        content.body = "\(fileName): \(reason)"
-        content.sound = .default
-
-        let request = UNNotificationRequest(
-            identifier: "download-failed-\(UUID().uuidString)",
-            content: content,
-            trigger: nil
-        )
-
-        UNUserNotificationCenter.current().add(request) { [weak self] error in
-            if let error {
-                self?.handleNotificationError(error)
-            }
-        }
-    }
-}
-
-// MARK: - PersistenceService extension for downloads
-
-extension PersistenceService {
-    func saveDownloadQueue(_ items: [DownloadItem]) {
-        fileLock.lock()
-        defer { fileLock.unlock() }
-
-        guard let data = try? JSONEncoder().encode(items) else { return }
-        let url = appSupportURL.appendingPathComponent("download_queue.json")
-
-        guard hasSufficientDiskSpace(for: data.count) else { return }
-        createBackup(for: url)
-        try? data.write(to: url)
-    }
-
-    func loadDownloadQueue() -> [DownloadItem] {
-        fileLock.lock()
-        defer { fileLock.unlock() }
-
-        let url = appSupportURL.appendingPathComponent("download_queue.json")
-        guard let data = try? Data(contentsOf: url) else { return [] }
-        return (try? JSONDecoder().decode([DownloadItem].self, from: data)) ?? []
-    }
-
-    func saveDownloadBatches(_ batches: [DownloadBatch]) {
-        fileLock.lock()
-        defer { fileLock.unlock() }
-
-        guard let data = try? JSONEncoder().encode(batches) else { return }
-        let url = appSupportURL.appendingPathComponent("download_batches.json")
-
-        guard hasSufficientDiskSpace(for: data.count) else { return }
-        createBackup(for: url)
-        try? data.write(to: url)
-    }
-
-    func loadDownloadBatches() -> [DownloadBatch] {
-        fileLock.lock()
-        defer { fileLock.unlock() }
-
-        let url = appSupportURL.appendingPathComponent("download_batches.json")
-        guard let data = try? Data(contentsOf: url) else { return [] }
-        return (try? JSONDecoder().decode([DownloadBatch].self, from: data)) ?? []
     }
 }

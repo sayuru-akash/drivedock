@@ -63,6 +63,7 @@
 		A10062 /* DownloadItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10062; };
 		A10063 /* DownloadEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10063; };
 		A10064 /* DownloadLocationPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10064; };
+		A10065 /* DownloadFolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10065; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -121,6 +122,7 @@
 		B10062 /* DownloadItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadItem.swift; sourceTree = "<group>"; };
 		B10063 /* DownloadEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadEngine.swift; sourceTree = "<group>"; };
 		B10064 /* DownloadLocationPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadLocationPicker.swift; sourceTree = "<group>"; };
+		B10065 /* DownloadFolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadFolderManager.swift; sourceTree = "<group>"; };
 		D10002 /* DriveDockTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DriveDockTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C10002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -287,6 +289,7 @@
 			children = (
 				B10016 /* MIMETypeDetector.swift */,
 				B10017 /* FileDropHandler.swift */,
+				B10065 /* DownloadFolderManager.swift */,
 			);
 			path = FileAccess;
 			sourceTree = "<group>";
@@ -575,6 +578,7 @@
 				A10062 /* DownloadItem.swift in Sources */,
 				A10063 /* DownloadEngine.swift in Sources */,
 				A10064 /* DownloadLocationPicker.swift in Sources */,
+				A10065 /* DownloadFolderManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
