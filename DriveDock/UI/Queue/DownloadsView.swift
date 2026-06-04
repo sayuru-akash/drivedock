@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DownloadsView: View {
     @Environment(AppState.self) private var appState
+    @State private var selectedItems = Set<String>()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,11 +33,24 @@ struct DownloadsView: View {
                 .help("Clear completed")
                 .disabled(appState.downloadEngine.completedCount == 0)
 
+                Button {
+                    appState.downloadEngine.clearFailed()
+                } label: {
+                    Image(systemName: "xmark.circle")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 12, height: 12)
+                }
+                .help("Clear failed")
+                .disabled(appState.downloadEngine.failedCount == 0)
+
                 Spacer()
 
-                Text("\(appState.downloadEngine.activeDownloadCount) active")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if appState.downloadEngine.activeDownloadCount > 0 {
+                    Text("\(appState.downloadEngine.activeDownloadCount) active")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 if appState.downloadEngine.totalSpeed > 0 {
                     Text(ByteCountFormatter.string(fromByteCount: Int64(appState.downloadEngine.totalSpeed), countStyle: .file) + "/s")
@@ -51,22 +65,47 @@ struct DownloadsView: View {
             Divider()
 
             if appState.downloadEngine.items.isEmpty {
-                VStack {
+                VStack(spacing: 12) {
                     Spacer()
-                    ContentUnavailableView {
-                        Label("No Downloads", systemImage: "arrow.down.circle")
-                    } description: {
-                        Text("Download files from your Google Drive\nusing the browser.")
-                            .multilineTextAlignment(.center)
-                    }
+                    Image(systemName: "arrow.down.circle")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 48, height: 48)
+                        .foregroundStyle(.secondary)
+                    Text("No Downloads")
+                        .font(.title3.weight(.medium))
+                    Text("Download files from your Google Drive\nusing the browser.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(appState.downloadEngine.items) { item in
+                List(appState.downloadEngine.items, selection: $selectedItems) { item in
                     DownloadItemRow(item: item)
+                        .tag(item.id)
                 }
                 .listStyle(.inset)
+            }
+
+            // Status bar
+            if !appState.downloadEngine.items.isEmpty {
+                Divider()
+                HStack {
+                    Text("\(appState.downloadEngine.completedCount) of \(appState.downloadEngine.items.count) completed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if appState.downloadEngine.failedCount > 0 {
+                        Text("\(appState.downloadEngine.failedCount) failed")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .background(.bar)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -92,9 +131,15 @@ struct DownloadItemRow: View {
                     .truncationMode(.middle)
 
                 HStack(spacing: 8) {
-                    Text(item.formattedSize)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if item.fileSize > 0 {
+                        Text(item.formattedSize)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Size unknown")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
 
                     if item.status == .downloading {
                         Text(item.formattedSpeed)
@@ -102,6 +147,13 @@ struct DownloadItemRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                // Show file path
+                Text(item.localPath)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
 
             Spacer()
@@ -144,7 +196,8 @@ struct DownloadItemRow: View {
                         Text(error)
                             .font(.caption)
                             .foregroundStyle(.red)
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
                     }
                     Button("Retry") {
                         appState.downloadEngine.retryItem(item.id)
@@ -170,6 +223,9 @@ struct DownloadItemRow: View {
                     Divider()
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.selectFile(item.localPath, inFileViewerRootedAtPath: (item.localPath as NSString).deletingLastPathComponent)
+                    }
+                    Button("Open File") {
+                        NSWorkspace.shared.open(URL(fileURLWithPath: item.localPath))
                     }
                 }
             } label: {

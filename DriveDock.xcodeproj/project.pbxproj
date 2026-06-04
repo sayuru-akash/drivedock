@@ -62,6 +62,7 @@
 		A10061 /* DownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10061; };
 		A10062 /* DownloadItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10062; };
 		A10063 /* DownloadEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10063; };
+		A10064 /* DownloadLocationPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10064; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -119,6 +120,7 @@
 		B10061 /* DownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadsView.swift; sourceTree = "<group>"; };
 		B10062 /* DownloadItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadItem.swift; sourceTree = "<group>"; };
 		B10063 /* DownloadEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadEngine.swift; sourceTree = "<group>"; };
+		B10064 /* DownloadLocationPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadLocationPicker.swift; sourceTree = "<group>"; };
 		D10002 /* DriveDockTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DriveDockTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C10002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -389,6 +391,7 @@
 				B10029 /* AccountSelectorButton.swift */,
 				B10040 /* CompletionSummaryView.swift */,
 				B10041 /* AnimatedViews.swift */,
+				B10064 /* DownloadLocationPicker.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -571,6 +574,7 @@
 				A10061 /* DownloadsView.swift in Sources */,
 				A10062 /* DownloadItem.swift in Sources */,
 				A10063 /* DownloadEngine.swift in Sources */,
+				A10064 /* DownloadLocationPicker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

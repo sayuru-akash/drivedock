@@ -9,6 +9,7 @@ struct DriveDockApp: App {
             ContentView()
                 .environment(appState)
                 .frame(minWidth: 900, minHeight: 600)
+                .preferredColorScheme(colorSchemeForTheme(appState.settings.theme))
                 .onAppear {
                     configureAppearance()
                 }
@@ -122,6 +123,14 @@ struct DriveDockApp: App {
 
     private func configureAppearance() {
         NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
+    private func colorSchemeForTheme(_ theme: AppTheme) -> ColorScheme? {
+        switch theme {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
     }
 
     private func openFilePicker() {

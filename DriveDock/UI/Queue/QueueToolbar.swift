@@ -35,10 +35,25 @@ struct QueueToolbar: View {
                 appState.engine.clearCompleted()
             } label: {
                 Image(systemName: "checkmark.circle")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 14, height: 14)
             }
             .help("Clear completed")
             .accessibilityLabel("Clear completed uploads")
             .disabled(appState.engine.completedCount == 0)
+
+            Button {
+                appState.engine.clearFailed()
+            } label: {
+                Image(systemName: "xmark.circle")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 14, height: 14)
+            }
+            .help("Clear failed")
+            .accessibilityLabel("Clear failed uploads")
+            .disabled(appState.engine.failedCount == 0)
 
             Spacer()
 

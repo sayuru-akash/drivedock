@@ -54,11 +54,14 @@ final class DownloadEngine {
         driveFileID: String,
         fileName: String,
         fileSize: Int64,
-        localDirectory: URL,
+        localDirectory: URL? = nil,
         accountID: String,
         batchID: String? = nil
     ) -> DownloadItem {
-        let localPath = localDirectory.appendingPathComponent(fileName).path
+        // Use Downloads folder if no directory specified
+        let targetDir = localDirectory ?? defaultDownloadsDirectory()
+        let localPath = targetDir.appendingPathComponent(fileName).path
+        
         let item = DownloadItem(
             id: UUID().uuidString,
             fileName: fileName,
@@ -78,6 +81,11 @@ final class DownloadEngine {
         items.append(item)
         persistence.saveDownloadQueue(items)
         return item
+    }
+
+    private func defaultDownloadsDirectory() -> URL {
+        FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first 
+            ?? FileManager.default.temporaryDirectory
     }
 
     // MARK: - Folder Download
@@ -392,12 +400,13 @@ final class DownloadEngine {
         let localURL = URL(fileURLWithPath: item.localPath)
         let parentDir = localURL.deletingLastPathComponent()
 
+        // Ensure parent directory exists
         do {
-            try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true, attributes: nil)
         } catch {
             await MainActor.run {
                 self.items[index].status = .failed
-                self.items[index].error = DownloadEngineError.cannotCreateDirectory(parentDir.path).localizedDescription
+                self.items[index].error = "Cannot create folder: \(error.localizedDescription)"
                 self.activeTasks.removeValue(forKey: itemID)
                 self.activeDownloadCount = max(0, self.activeDownloadCount - 1)
                 self.speedTrackers.removeValue(forKey: itemID)
@@ -406,6 +415,7 @@ final class DownloadEngine {
             return
         }
 
+        // Check if file already exists with same size
         if FileManager.default.fileExists(atPath: item.localPath) {
             let existingSize = (try? FileManager.default.attributesOfItem(atPath: item.localPath)[FileAttributeKey.size] as? Int64) ?? 0
             if existingSize == item.fileSize && item.fileSize > 0 {

@@ -14,11 +14,11 @@ struct SidebarView: View {
                 }
             }
 
-            Section("Queue") {
+            Section("Upload Queue") {
                 ForEach([SidebarItem.queue, .active, .completed, .failed, .paused], id: \.self) { item in
                     Label(item.displayName, systemImage: item.systemImage)
                         .tag(item)
-                        .badge(badgeCount(for: item))
+                        .badge(uploadBadgeCount(for: item))
                 }
             }
 
@@ -38,13 +38,13 @@ struct SidebarView: View {
         .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 240)
     }
 
-    private func badgeCount(for item: SidebarItem) -> Int {
+    private func uploadBadgeCount(for item: SidebarItem) -> Int {
         let engine = appState.engine
         switch item {
         case .queue: return engine.items.filter { $0.status == .waiting }.count
-        case .active: return engine.activeUploadCount + appState.downloadEngine.activeDownloadCount
-        case .completed: return engine.completedCount + appState.downloadEngine.completedCount
-        case .failed: return engine.failedCount + appState.downloadEngine.failedCount
+        case .active: return engine.activeUploadCount
+        case .completed: return engine.completedCount
+        case .failed: return engine.failedCount
         case .paused: return engine.pausedCount
         default: return 0
         }

@@ -4,14 +4,16 @@ struct HistoryView: View {
     @Environment(AppState.self) private var appState
     @State private var history: [UploadHistoryEntry] = []
     @State private var searchText = ""
-    @State private var showExportSheet = false
 
     var body: some View {
         VStack(spacing: 0) {
             // Toolbar
             HStack {
-                HStack {
+                HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 12, height: 12)
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
                     TextField("Search history...", text: $searchText)
@@ -39,18 +41,28 @@ struct HistoryView: View {
                 .controlSize(.small)
                 .accessibilityLabel("Export history")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
             .background(.bar)
 
             Divider()
 
             if filteredHistory.isEmpty {
-                ContentUnavailableView {
-                    Label("No History", systemImage: "clock.arrow.circlepath")
-                } description: {
+                VStack(spacing: 12) {
+                    Spacer()
+                    Image(systemName: "clock.arrow.circlepath")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 48, height: 48)
+                        .foregroundStyle(.secondary)
+                    Text("No History")
+                        .font(.title3.weight(.medium))
                     Text("Completed uploads will appear here.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(filteredHistory) { entry in
                     HistoryRow(entry: entry)
@@ -70,9 +82,9 @@ struct HistoryView: View {
                         }
                 }
                 .listStyle(.inset)
-                .animation(.easeInOut(duration: 0.2), value: filteredHistory.count)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             history = appState.persistence.loadHistory()
         }
@@ -107,14 +119,17 @@ struct HistoryRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: entry.status == .completed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 16, height: 16)
                 .foregroundStyle(entry.status == .completed ? .green : .red)
-                .font(.system(size: 16))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.fileName)
                     .font(.body)
                     .lineLimit(1)
+                    .truncationMode(.middle)
 
                 HStack(spacing: 8) {
                     Text(entry.formattedSize)
@@ -155,7 +170,9 @@ struct HistoryRow: View {
                         }
                     } label: {
                         Image(systemName: "arrow.up.right.square")
-                            .font(.system(size: 14))
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 14, height: 14)
                     }
                     .buttonStyle(.borderless)
                     .help("Open in Drive")
@@ -166,7 +183,9 @@ struct HistoryRow: View {
                         NSPasteboard.general.setString(link, forType: .string)
                     } label: {
                         Image(systemName: "doc.on.doc")
-                            .font(.system(size: 12))
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 12)
                     }
                     .buttonStyle(.borderless)
                     .help("Copy link")
@@ -175,7 +194,7 @@ struct HistoryRow: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
