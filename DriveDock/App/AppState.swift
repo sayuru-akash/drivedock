@@ -6,6 +6,7 @@ final class AppState {
 
     let auth = GoogleAuthService.shared
     let engine = UploadEngine.shared
+    let downloadEngine = DownloadEngine.shared
     let settings = AppSettings.shared
     let persistence = PersistenceService.shared
     let notifications = NotificationService.shared
@@ -31,6 +32,7 @@ final class AppState {
 
 enum SidebarItem: String, CaseIterable, Identifiable {
     case uploads
+    case downloads
     case queue
     case active
     case completed
@@ -50,6 +52,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .uploads: return "Uploads"
+        case .downloads: return "Downloads"
         case .queue: return "Queue"
         case .active: return "Active"
         case .completed: return "Completed"
@@ -69,6 +72,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .uploads: return "arrow.up.circle"
+        case .downloads: return "arrow.down.circle"
         case .queue: return "list.bullet"
         case .active: return "arrow.up.circle.fill"
         case .completed: return "checkmark.circle.fill"

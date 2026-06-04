@@ -59,6 +59,9 @@
 		A10058 /* FileDropHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10058; };
 		A10059 /* DriveFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10059; };
 		A10060 /* DriveBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060; };
+		A10061 /* DownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10061; };
+		A10062 /* DownloadItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10062; };
+		A10063 /* DownloadEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10063; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -113,6 +116,9 @@
 		B10058 /* FileDropHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropHandlerTests.swift; sourceTree = "<group>"; };
 		B10059 /* DriveFolderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveFolderTests.swift; sourceTree = "<group>"; };
 		B10060 /* DriveBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveBrowserView.swift; sourceTree = "<group>"; };
+		B10061 /* DownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadsView.swift; sourceTree = "<group>"; };
+		B10062 /* DownloadItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadItem.swift; sourceTree = "<group>"; };
+		B10063 /* DownloadEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadEngine.swift; sourceTree = "<group>"; };
 		D10002 /* DriveDockTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DriveDockTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C10002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -206,6 +212,7 @@
 				B10007 /* DriveFolder.swift */,
 				B10008 /* UploadHistory.swift */,
 				B10009 /* AppSettings.swift */,
+				B10062 /* DownloadItem.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -216,6 +223,7 @@
 				F10011 /* Auth */,
 				F10012 /* DriveAPI */,
 				F10013 /* Upload */,
+				F10013B /* Download */,
 				F10014 /* Persistence */,
 				F10015 /* Notifications */,
 				F10016 /* FileAccess */,
@@ -246,6 +254,14 @@
 				B10013 /* UploadEngine.swift */,
 			);
 			path = Upload;
+			sourceTree = "<group>";
+		};
+		F10013B /* Download */ = {
+			isa = PBXGroup;
+			children = (
+				B10063 /* DownloadEngine.swift */,
+			);
+			path = Download;
 			sourceTree = "<group>";
 		};
 		F10014 /* Persistence */ = {
@@ -315,6 +331,7 @@
 				B10023 /* QueueToolbar.swift */,
 				B10024 /* FilteredQueueView.swift */,
 				B10025 /* QueueItemRow.swift */,
+				B10061 /* DownloadsView.swift */,
 			);
 			path = Queue;
 			sourceTree = "<group>";
@@ -551,6 +568,9 @@
 				A10040 /* CompletionSummaryView.swift in Sources */,
 				A10041 /* AnimatedViews.swift in Sources */,
 				A10060 /* DriveBrowserView.swift in Sources */,
+				A10061 /* DownloadsView.swift in Sources */,
+				A10062 /* DownloadItem.swift in Sources */,
+				A10063 /* DownloadEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

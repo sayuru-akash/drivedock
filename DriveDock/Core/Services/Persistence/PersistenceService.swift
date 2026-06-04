@@ -5,9 +5,9 @@ final class PersistenceService {
 
     private let defaults = UserDefaults.standard
     private let fileManager = FileManager.default
-    private let fileLock = NSLock()
+    let fileLock = NSLock()
 
-    private var appSupportURL: URL {
+    var appSupportURL: URL {
         fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("DriveDock")
     }
@@ -270,7 +270,7 @@ final class PersistenceService {
 
     // MARK: - Disk Space
 
-    private func hasSufficientDiskSpace(for bytes: Int) -> Bool {
+    func hasSufficientDiskSpace(for bytes: Int) -> Bool {
         guard let attrs = try? fileManager.attributesOfFileSystem(forPath: appSupportURL.path),
               let freeSpace = attrs[.systemFreeSize] as? Int64 else {
             return true
@@ -280,7 +280,7 @@ final class PersistenceService {
 
     // MARK: - Backup
 
-    private func createBackup(for fileURL: URL) {
+    func createBackup(for fileURL: URL) {
         guard fileManager.fileExists(atPath: fileURL.path) else { return }
         let fileName = fileURL.lastPathComponent
         let backupFileURL = backupURL.appendingPathComponent(fileName)

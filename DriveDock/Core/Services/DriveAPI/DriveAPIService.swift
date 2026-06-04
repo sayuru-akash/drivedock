@@ -111,6 +111,7 @@ final class DriveAPIService {
     private func executeWithRetry<T>(_ operation: () async throws -> T) async throws -> T {
         var lastError: Error?
         for attempt in 0..<maxRetries {
+            if Task.isCancelled { throw lastError ?? DriveAPIError.networkUnavailable }
             do {
                 return try await operation()
             } catch let error as DriveAPIError {
@@ -139,6 +140,8 @@ final class DriveAPIService {
                 default:
                     throw error
                 }
+            } catch is CancellationError {
+                throw lastError ?? DriveAPIError.networkUnavailable
             } catch {
                 let nsError = error as NSError
                 if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
@@ -192,7 +195,7 @@ final class DriveAPIService {
             request.timeoutInterval = self.requestTimeout
 
             let (data, response) = try await self.session.data(for: request)
-            try self.validateResponse(response)
+            try self.validateResponse(response, data: data)
 
             let listResponse = try self.jsonDecoder.decode(DriveAPIListResponse.self, from: data)
 
@@ -272,7 +275,7 @@ final class DriveAPIService {
             request.timeoutInterval = self.requestTimeout
 
             let (data, response) = try await self.session.data(for: request)
-            try self.validateResponse(response)
+            try self.validateResponse(response, data: data)
 
             let listResponse = try self.jsonDecoder.decode(DriveAPIListResponse.self, from: data)
 
@@ -298,71 +301,90 @@ final class DriveAPIService {
         parentID: String,
         accountID: String
     ) async throws -> DriveFolder {
-        let accessToken = try await auth.getAccessToken(for: accountID)
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
 
-        guard let url = URL(string: "\(baseURL)/files?supportsAllDrives=true") else {
-            throw DriveAPIError.invalidResponse
+            guard let url = URL(string: "\(self.baseURL)/files?supportsAllDrives=true") else {
+                throw DriveAPIError.invalidResponse
+            }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = self.requestTimeout
+
+            let body = DriveAPICreateFolderRequest(name: name, parentID: parentID)
+            request.httpBody = try self.jsonEncoder.encode(body)
+
+            let (data, response) = try await self.session.data(for: request)
+            try self.validateResponse(response, data: data)
+
+            let file = try self.jsonDecoder.decode(DriveAPIListResponse.DriveAPIFile.self, from: data)
+            return DriveFolder(
+                id: file.id,
+                name: file.name,
+                parentID: file.parents?.first,
+                isSharedDrive: false,
+                sharedDriveID: nil,
+                ownerEmail: nil,
+                modifiedDate: nil,
+                childCount: nil
+            )
         }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body = DriveAPICreateFolderRequest(name: name, parentID: parentID)
-        request.httpBody = try jsonEncoder.encode(body)
-
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
-
-        let file = try jsonDecoder.decode(DriveAPIListResponse.DriveAPIFile.self, from: data)
-        return DriveFolder(
-            id: file.id,
-            name: file.name,
-            parentID: file.parents?.first,
-            isSharedDrive: false,
-            sharedDriveID: nil,
-            ownerEmail: nil,
-            modifiedDate: nil,
-            childCount: nil
-        )
     }
 
     // MARK: - Shared Drives
 
     func listSharedDrives(accountID: String) async throws -> [SharedDrive] {
-        let accessToken = try await auth.getAccessToken(for: accountID)
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
 
-        var components = URLComponents(string: "\(baseURL)/drives")!
-        components.queryItems = [
-            URLQueryItem(name: "fields", value: "drives(id,name,createdTime)"),
-            URLQueryItem(name: "pageSize", value: "100")
-        ]
+            var allDrives: [SharedDrive] = []
+            var pageToken: String? = nil
 
-        guard let url = components.url else { throw DriveAPIError.invalidResponse }
+            repeat {
+                var components = URLComponents(string: "\(self.baseURL)/drives")!
+                var queryItems = [
+                    URLQueryItem(name: "fields", value: "drives(id,name,createdTime),nextPageToken"),
+                    URLQueryItem(name: "pageSize", value: "100")
+                ]
+                if let pageToken {
+                    queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+                }
+                components.queryItems = queryItems
 
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                guard let url = components.url else { throw DriveAPIError.invalidResponse }
 
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+                var request = URLRequest(url: url)
+                request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                request.timeoutInterval = self.requestTimeout
 
-        struct DrivesResponse: Codable {
-            let drives: [DriveItem]
-            struct DriveItem: Codable {
-                let id: String
-                let name: String
-                let createdTime: String?
-            }
-        }
+                let (data, response) = try await self.session.data(for: request)
+                try self.validateResponse(response, data: data)
 
-        let drivesResponse = try jsonDecoder.decode(DrivesResponse.self, from: data)
-        return drivesResponse.drives.map { drive in
-            SharedDrive(
-                id: drive.id,
-                name: drive.name,
-                createdDate: nil
-            )
+                struct DrivesResponse: Codable {
+                    let drives: [DriveItem]
+                    let nextPageToken: String?
+                    struct DriveItem: Codable {
+                        let id: String
+                        let name: String
+                        let createdTime: String?
+                    }
+                }
+
+                let drivesResponse = try self.jsonDecoder.decode(DrivesResponse.self, from: data)
+                allDrives.append(contentsOf: drivesResponse.drives.map { drive in
+                    SharedDrive(
+                        id: drive.id,
+                        name: drive.name,
+                        createdDate: nil
+                    )
+                })
+                pageToken = drivesResponse.nextPageToken
+            } while pageToken != nil
+
+            return allDrives
         }
     }
 
@@ -371,44 +393,47 @@ final class DriveAPIService {
         folderID: String? = nil,
         accountID: String
     ) async throws -> [DriveFolder] {
-        let parentID = folderID ?? driveID
-        let accessToken = try await auth.getAccessToken(for: accountID)
+        return try await executeWithRetry {
+            let parentID = folderID ?? driveID
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
 
-        var components = URLComponents(string: "\(baseURL)/files")!
-        components.queryItems = [
-            URLQueryItem(name: "q", value: "'\(parentID)' in parents and trashed = false"),
-            URLQueryItem(name: "fields", value: "files(id,name,mimeType,parents,webViewLink,modifiedTime,capabilities),nextPageToken"),
-            URLQueryItem(name: "pageSize", value: "100"),
-            URLQueryItem(name: "supportsAllDrives", value: "true"),
-            URLQueryItem(name: "includeItemsFromAllDrives", value: "true"),
-            URLQueryItem(name: "driveId", value: driveID),
-            URLQueryItem(name: "corpora", value: "drive")
-        ]
+            var components = URLComponents(string: "\(self.baseURL)/files")!
+            components.queryItems = [
+                URLQueryItem(name: "q", value: "'\(parentID)' in parents and trashed = false"),
+                URLQueryItem(name: "fields", value: "files(id,name,mimeType,parents,webViewLink,modifiedTime,capabilities),nextPageToken"),
+                URLQueryItem(name: "pageSize", value: "100"),
+                URLQueryItem(name: "supportsAllDrives", value: "true"),
+                URLQueryItem(name: "includeItemsFromAllDrives", value: "true"),
+                URLQueryItem(name: "driveId", value: driveID),
+                URLQueryItem(name: "corpora", value: "drive")
+            ]
 
-        guard let url = components.url else { throw DriveAPIError.invalidResponse }
+            guard let url = components.url else { throw DriveAPIError.invalidResponse }
 
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = self.requestTimeout
 
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+            let (data, response) = try await self.session.data(for: request)
+            try self.validateResponse(response, data: data)
 
-        let listResponse = try jsonDecoder.decode(DriveAPIListResponse.self, from: data)
+            let listResponse = try self.jsonDecoder.decode(DriveAPIListResponse.self, from: data)
 
-        return listResponse.files
-            .filter { $0.isFolder }
-            .map { apiFile in
-                DriveFolder(
-                    id: apiFile.id,
-                    name: apiFile.name,
-                    parentID: apiFile.parents?.first,
-                    isSharedDrive: true,
-                    sharedDriveID: driveID,
-                    ownerEmail: nil,
-                    modifiedDate: nil,
-                    childCount: nil
-                )
-            }
+            return listResponse.files
+                .filter { $0.isFolder }
+                .map { apiFile in
+                    DriveFolder(
+                        id: apiFile.id,
+                        name: apiFile.name,
+                        parentID: apiFile.parents?.first,
+                        isSharedDrive: true,
+                        sharedDriveID: driveID,
+                        ownerEmail: nil,
+                        modifiedDate: nil,
+                        childCount: nil
+                    )
+                }
+        }
     }
 
     // MARK: - File Upload
@@ -420,38 +445,41 @@ final class DriveAPIService {
         parentFolderID: String,
         accountID: String
     ) async throws -> ResumableUploadSession {
-        let accessToken = try await auth.getAccessToken(for: accountID)
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
 
-        guard let url = URL(string: "\(uploadBaseURL)/files?uploadType=resumable&supportsAllDrives=true") else {
-            throw DriveAPIError.invalidResponse
+            guard let url = URL(string: "\(self.uploadBaseURL)/files?uploadType=resumable&supportsAllDrives=true") else {
+                throw DriveAPIError.invalidResponse
+            }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+            request.setValue("\(fileSize)", forHTTPHeaderField: "X-Upload-Content-Length")
+            request.setValue(mimeType, forHTTPHeaderField: "X-Upload-Content-Type")
+            request.timeoutInterval = self.requestTimeout
+
+            let metadata: [String: Any] = [
+                "name": fileName,
+                "parents": [parentFolderID]
+            ]
+            request.httpBody = try JSONSerialization.data(withJSONObject: metadata)
+
+            let (_, response) = try await self.session.data(for: request)
+            try self.validateResponse(response)
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  let uploadURL = httpResponse.value(forHTTPHeaderField: "Location") else {
+                throw DriveAPIError.invalidResponse
+            }
+
+            return ResumableUploadSession(
+                uploadURL: uploadURL,
+                fileID: nil,
+                createdDate: Date()
+            )
         }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json; charset=UTF-8", forHTTPHeaderField: "Content-Type")
-        request.setValue("\(fileSize)", forHTTPHeaderField: "X-Upload-Content-Length")
-        request.setValue(mimeType, forHTTPHeaderField: "X-Upload-Content-Type")
-
-        let metadata: [String: Any] = [
-            "name": fileName,
-            "parents": [parentFolderID]
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: metadata)
-
-        let (_, response) = try await session.data(for: request)
-        try validateResponse(response)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              let uploadURL = httpResponse.value(forHTTPHeaderField: "Location") else {
-            throw DriveAPIError.invalidResponse
-        }
-
-        return ResumableUploadSession(
-            uploadURL: uploadURL,
-            fileID: nil,
-            createdDate: Date()
-        )
     }
 
     func uploadChunk(
@@ -500,81 +528,42 @@ final class DriveAPIService {
         parentFolderID: String,
         accountID: String
     ) async throws -> DriveFile {
-        let accessToken = try await auth.getAccessToken(for: accountID)
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
 
-        guard let url = URL(string: "\(uploadBaseURL)/files?uploadType=multipart&supportsAllDrives=true") else {
-            throw DriveAPIError.invalidResponse
-        }
+            guard let url = URL(string: "\(self.uploadBaseURL)/files?uploadType=multipart&supportsAllDrives=true") else {
+                throw DriveAPIError.invalidResponse
+            }
 
-        let boundary = UUID().uuidString
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/related; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            let boundary = UUID().uuidString
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("multipart/related; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = self.requestTimeout
 
-        let metadata: [String: Any] = [
-            "name": fileName,
-            "parents": [parentFolderID]
-        ]
-        let metadataData = try JSONSerialization.data(withJSONObject: metadata)
+            let metadata: [String: Any] = [
+                "name": fileName,
+                "parents": [parentFolderID]
+            ]
+            let metadataData = try JSONSerialization.data(withJSONObject: metadata)
 
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Type: application/json; charset=UTF-8\r\n\r\n".data(using: .utf8)!)
-        body.append(metadataData)
-        body.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
-        body.append(fileData)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+            var body = Data()
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Type: application/json; charset=UTF-8\r\n\r\n".data(using: .utf8)!)
+            body.append(metadataData)
+            body.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+            body.append(fileData)
+            body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
 
-        request.httpBody = body
+            request.httpBody = body
 
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+            let (data, response) = try await self.session.data(for: request)
+            try self.validateResponse(response, data: data)
 
-        let file = try jsonDecoder.decode(DriveAPIListResponse.DriveAPIFile.self, from: data)
-        return DriveFile(
-            id: file.id,
-            name: file.name,
-            mimeType: file.mimeType,
-            size: file.parsedSize,
-            parentID: file.parents?.first,
-            webViewLink: file.webViewLink,
-            createdDate: nil,
-            modifiedDate: nil
-        )
-    }
-
-    // MARK: - File Info
-
-    func checkDuplicate(
-        fileName: String,
-        parentFolderID: String,
-        accountID: String
-    ) async throws -> [DriveFile] {
-        let accessToken = try await auth.getAccessToken(for: accountID)
-
-        let query = "name = '\(fileName.replacingOccurrences(of: "'", with: "\\'"))' and '\(parentFolderID)' in parents and trashed = false"
-
-        var components = URLComponents(string: "\(baseURL)/files")!
-        components.queryItems = [
-            URLQueryItem(name: "q", value: query),
-            URLQueryItem(name: "fields", value: "files(id,name,mimeType,size,parents,webViewLink,createdTime,modifiedTime)"),
-            URLQueryItem(name: "supportsAllDrives", value: "true"),
-            URLQueryItem(name: "includeItemsFromAllDrives", value: "true")
-        ]
-
-        guard let url = components.url else { throw DriveAPIError.invalidResponse }
-
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
-
-        let listResponse = try jsonDecoder.decode(DriveAPIListResponse.self, from: data)
-        return listResponse.files.map { file in
-            DriveFile(
+            let file = try self.jsonDecoder.decode(DriveAPIListResponse.DriveAPIFile.self, from: data)
+            return DriveFile(
                 id: file.id,
                 name: file.name,
                 mimeType: file.mimeType,
@@ -587,31 +576,166 @@ final class DriveAPIService {
         }
     }
 
+    // MARK: - File Info
+
+    func checkDuplicate(
+        fileName: String,
+        parentFolderID: String,
+        accountID: String
+    ) async throws -> [DriveFile] {
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
+
+            let query = "name = '\(fileName.replacingOccurrences(of: "'", with: "\\'"))' and '\(parentFolderID)' in parents and trashed = false"
+
+            var components = URLComponents(string: "\(self.baseURL)/files")!
+            components.queryItems = [
+                URLQueryItem(name: "q", value: query),
+                URLQueryItem(name: "fields", value: "files(id,name,mimeType,size,parents,webViewLink,createdTime,modifiedTime)"),
+                URLQueryItem(name: "supportsAllDrives", value: "true"),
+                URLQueryItem(name: "includeItemsFromAllDrives", value: "true")
+            ]
+
+            guard let url = components.url else { throw DriveAPIError.invalidResponse }
+
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = self.requestTimeout
+
+            let (data, response) = try await self.session.data(for: request)
+            try self.validateResponse(response, data: data)
+
+            let listResponse = try self.jsonDecoder.decode(DriveAPIListResponse.self, from: data)
+            return listResponse.files.map { file in
+                DriveFile(
+                    id: file.id,
+                    name: file.name,
+                    mimeType: file.mimeType,
+                    size: file.parsedSize,
+                    parentID: file.parents?.first,
+                    webViewLink: file.webViewLink,
+                    createdDate: nil,
+                    modifiedDate: nil
+                )
+            }
+        }
+    }
+
     func getFileLink(fileID: String, accountID: String) async throws -> String? {
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
+
+            var components = URLComponents(string: "\(self.baseURL)/files/\(fileID)")!
+            components.queryItems = [
+                URLQueryItem(name: "fields", value: "webViewLink"),
+                URLQueryItem(name: "supportsAllDrives", value: "true")
+            ]
+
+            guard let url = components.url else { throw DriveAPIError.invalidResponse }
+
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = self.requestTimeout
+
+            let (data, response) = try await self.session.data(for: request)
+            try self.validateResponse(response, data: data)
+
+            struct FileLink: Codable { let webViewLink: String? }
+            let file = try self.jsonDecoder.decode(FileLink.self, from: data)
+            return file.webViewLink
+        }
+    }
+
+    // MARK: - Download
+
+    func getDownloadURL(fileID: String, accountID: String) async throws -> URL {
         let accessToken = try await auth.getAccessToken(for: accountID)
 
         var components = URLComponents(string: "\(baseURL)/files/\(fileID)")!
         components.queryItems = [
-            URLQueryItem(name: "fields", value: "webViewLink"),
+            URLQueryItem(name: "alt", value: "media"),
             URLQueryItem(name: "supportsAllDrives", value: "true")
         ]
 
         guard let url = components.url else { throw DriveAPIError.invalidResponse }
 
         var request = URLRequest(url: url)
+        request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = requestTimeout
 
-        let (data, response) = try await session.data(for: request)
+        let (_, response) = try await session.data(for: request)
         try validateResponse(response)
 
-        struct FileLink: Codable { let webViewLink: String? }
-        let file = try jsonDecoder.decode(FileLink.self, from: data)
-        return file.webViewLink
+        guard let responseURL = response.url else {
+            throw DriveAPIError.invalidResponse
+        }
+
+        return responseURL
+    }
+
+    func getFileMetadata(fileID: String, accountID: String) async throws -> DriveAPIListResponse.DriveAPIFile {
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
+
+            var components = URLComponents(string: "\(self.baseURL)/files/\(fileID)")!
+            components.queryItems = [
+                URLQueryItem(name: "fields", value: "id,name,mimeType,size,parents,webViewLink,createdTime,modifiedTime"),
+                URLQueryItem(name: "supportsAllDrives", value: "true")
+            ]
+
+            guard let url = components.url else { throw DriveAPIError.invalidResponse }
+
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = self.requestTimeout
+
+            let (data, response) = try await self.session.data(for: request)
+            try self.validateResponse(response, data: data)
+
+            return try self.jsonDecoder.decode(DriveAPIListResponse.DriveAPIFile.self, from: data)
+        }
+    }
+
+    func listFiles(
+        folderID: String,
+        accountID: String,
+        pageToken: String? = nil,
+        pageSize: Int = 100
+    ) async throws -> (files: [DriveAPIListResponse.DriveAPIFile], nextPageToken: String?) {
+        return try await executeWithRetry {
+            let accessToken = try await self.auth.getAccessToken(for: accountID)
+
+            var components = URLComponents(string: "\(self.baseURL)/files")!
+            var queryItems = [
+                URLQueryItem(name: "q", value: "'\(folderID)' in parents and trashed = false"),
+                URLQueryItem(name: "fields", value: "files(id,name,mimeType,size,parents,webViewLink,createdTime,modifiedTime),nextPageToken,incompleteSearch"),
+                URLQueryItem(name: "pageSize", value: "\(pageSize)"),
+                URLQueryItem(name: "supportsAllDrives", value: "true"),
+                URLQueryItem(name: "includeItemsFromAllDrives", value: "true")
+            ]
+            if let pageToken {
+                queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+            }
+            components.queryItems = queryItems
+
+            guard let url = components.url else { throw DriveAPIError.invalidResponse }
+
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = self.requestTimeout
+
+            let (data, response) = try await self.session.data(for: request)
+            try self.validateResponse(response, data: data)
+
+            let listResponse = try self.jsonDecoder.decode(DriveAPIListResponse.self, from: data)
+            return (listResponse.files, listResponse.nextPageToken)
+        }
     }
 
     // MARK: - Validation
 
-    private func validateResponse(_ response: URLResponse, data: Data? = nil) throws {
+    private func validateResponse(_ response: URLResponse, data: Data?) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw DriveAPIError.invalidResponse
         }

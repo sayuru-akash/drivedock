@@ -48,42 +48,46 @@ final class KeychainService {
     private let service = "com.drivedock.app"
     private let accessGroup: String? = nil
 
+    private let queue = DispatchQueue(label: "com.drivedock.keychain", attributes: .concurrent)
+
     var useBiometricAuthentication = false
 
     private init() {}
 
     func save(_ data: Data, for key: String) throws {
-        try delete(key: key)
+        try queue.sync(flags: .barrier) {
+            try deleteUnsafe(key: key)
 
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data
-        ]
-
-        if useBiometricAuthentication {
-            let access = try createBiometricAccessControl()
-            query[kSecAttrAccessControl as String] = access
-        }
-
-        let status = SecItemAdd(query as CFDictionary, nil)
-
-        if status == errSecDuplicateItem {
-            let updateQuery: [String: Any] = [
+            var query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
-                kSecAttrAccount as String: key
-            ]
-            let updateAttributes: [String: Any] = [
+                kSecAttrAccount as String: key,
                 kSecValueData as String: data
             ]
-            let updateStatus = SecItemUpdate(updateQuery as CFDictionary, updateAttributes as CFDictionary)
-            guard updateStatus == errSecSuccess else {
-                throw KeychainError.unexpectedStatus(updateStatus)
+
+            if useBiometricAuthentication {
+                let access = try createBiometricAccessControl()
+                query[kSecAttrAccessControl as String] = access
             }
-        } else if status != errSecSuccess {
-            throw KeychainError.unexpectedStatus(status)
+
+            let status = SecItemAdd(query as CFDictionary, nil)
+
+            if status == errSecDuplicateItem {
+                let updateQuery: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrService as String: service,
+                    kSecAttrAccount as String: key
+                ]
+                let updateAttributes: [String: Any] = [
+                    kSecValueData as String: data
+                ]
+                let updateStatus = SecItemUpdate(updateQuery as CFDictionary, updateAttributes as CFDictionary)
+                guard updateStatus == errSecSuccess else {
+                    throw KeychainError.unexpectedStatus(updateStatus)
+                }
+            } else if status != errSecSuccess {
+                throw KeychainError.unexpectedStatus(status)
+            }
         }
     }
 
@@ -95,29 +99,31 @@ final class KeychainService {
     }
 
     func load(key: String) throws -> Data {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
+        try queue.sync {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: key,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne
+            ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+            var result: AnyObject?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-        guard status == errSecSuccess else {
-            if status == errSecItemNotFound {
-                throw KeychainError.itemNotFound
+            guard status == errSecSuccess else {
+                if status == errSecItemNotFound {
+                    throw KeychainError.itemNotFound
+                }
+                throw KeychainError.unexpectedStatus(status)
             }
-            throw KeychainError.unexpectedStatus(status)
-        }
 
-        guard let data = result as? Data else {
-            throw KeychainError.dataConversionFailed
-        }
+            guard let data = result as? Data else {
+                throw KeychainError.dataConversionFailed
+            }
 
-        return data
+            return data
+        }
     }
 
     func loadWithBiometric(key: String, reason: String = "Authenticate to access secure data") async throws -> Data {
@@ -143,6 +149,8 @@ final class KeychainService {
                         continuation.resume(throwing: KeychainError.itemNotFound)
                     } else if status == errSecUserCanceled || status == errSecAuthFailed {
                         continuation.resume(throwing: KeychainError.authenticationFailed("Biometric authentication was cancelled or failed"))
+                    } else if status == errSecInteractionNotAllowed {
+                        continuation.resume(throwing: KeychainError.accessDenied)
                     } else {
                         continuation.resume(throwing: KeychainError.unexpectedStatus(status))
                     }
@@ -168,6 +176,12 @@ final class KeychainService {
     }
 
     func delete(key: String) throws {
+        try queue.sync(flags: .barrier) {
+            try deleteUnsafe(key: key)
+        }
+    }
+
+    private func deleteUnsafe(key: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -181,52 +195,56 @@ final class KeychainService {
     }
 
     func deleteAll() throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service
-        ]
+        try queue.sync(flags: .barrier) {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service
+            ]
 
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw KeychainError.unexpectedStatus(status)
+            let status = SecItemDelete(query as CFDictionary)
+            guard status == errSecSuccess || status == errSecItemNotFound else {
+                throw KeychainError.unexpectedStatus(status)
+            }
         }
     }
 
     func migrateService(from oldService: String) throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: oldService,
-            kSecReturnData as String: true,
-            kSecReturnAttributes as String: true,
-            kSecMatchLimit as String: kSecMatchLimitAll
-        ]
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        guard status == errSecSuccess, let items = result as? [[String: Any]] else {
-            return
-        }
-
-        for item in items {
-            guard let account = item[kSecAttrAccount as String] as? String,
-                  let data = item[kSecValueData as String] as? Data else { continue }
-
-            let newQuery: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service,
-                kSecAttrAccount as String: account,
-                kSecValueData as String: data
-            ]
-
-            SecItemAdd(newQuery as CFDictionary, nil)
-
-            let deleteQuery: [String: Any] = [
+        try queue.sync(flags: .barrier) {
+            let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: oldService,
-                kSecAttrAccount as String: account
+                kSecReturnData as String: true,
+                kSecReturnAttributes as String: true,
+                kSecMatchLimit as String: kSecMatchLimitAll
             ]
-            SecItemDelete(deleteQuery as CFDictionary)
+
+            var result: AnyObject?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+            guard status == errSecSuccess, let items = result as? [[String: Any]] else {
+                return
+            }
+
+            for item in items {
+                guard let account = item[kSecAttrAccount as String] as? String,
+                      let data = item[kSecValueData as String] as? Data else { continue }
+
+                let newQuery: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrService as String: service,
+                    kSecAttrAccount as String: account,
+                    kSecValueData as String: data
+                ]
+
+                SecItemAdd(newQuery as CFDictionary, nil)
+
+                let deleteQuery: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrService as String: oldService,
+                    kSecAttrAccount as String: account
+                ]
+                SecItemDelete(deleteQuery as CFDictionary)
+            }
         }
     }
 

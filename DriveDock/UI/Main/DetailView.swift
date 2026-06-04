@@ -8,6 +8,8 @@ struct DetailView: View {
             switch appState.selectedSidebarItem {
             case .uploads:
                 UploadsOverviewView()
+            case .downloads:
+                DownloadsView()
             case .queue, .active, .completed, .failed, .paused:
                 FilteredQueueView(statusFilter: statusFilter)
             case .myDrive:

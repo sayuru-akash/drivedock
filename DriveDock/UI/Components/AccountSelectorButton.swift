@@ -44,11 +44,17 @@ struct AccountSelectorButton: View {
                 }
 
                 Image(systemName: "chevron.down")
-                    .font(.caption2)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 8, height: 8)
                     .foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        .cornerRadius(6)
         .accessibilityLabel("Account selector")
         .accessibilityHint("Choose a Google account for uploads")
         .popover(isPresented: $showAccountPopover) {

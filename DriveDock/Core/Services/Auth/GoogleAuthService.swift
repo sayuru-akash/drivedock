@@ -13,18 +13,15 @@ final class OAuthHTTPServer {
     func start(handler: @escaping (String) -> Void) -> Bool {
         self.callbackHandler = handler
 
-        // Create socket
         serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
         guard serverSocket >= 0 else {
             print("[OAuth] Failed to create socket: \(errno)")
             return false
         }
 
-        // Allow address reuse
         var reuse: Int32 = 1
         setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
 
-        // Bind
         var addr = sockaddr_in()
         addr.sin_family = UInt8(AF_INET)
         addr.sin_port = port.bigEndian
@@ -43,7 +40,6 @@ final class OAuthHTTPServer {
             return false
         }
 
-        // Listen
         guard listen(serverSocket, 1) == 0 else {
             print("[OAuth] Failed to listen: \(errno)")
             Darwin.close(serverSocket)
@@ -91,7 +87,6 @@ final class OAuthHTTPServer {
     }
 
     private func handleClient(_ client: Int32) {
-        // Set receive timeout
         var timeout = timeval(tv_sec: 5, tv_usec: 0)
         setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
 
@@ -105,7 +100,6 @@ final class OAuthHTTPServer {
 
         let request = String(cString: buffer)
 
-        // Parse: GET /oauth2callback?code=XXX&state=YYY HTTP/1.1
         guard let firstLine = request.components(separatedBy: "\r\n").first,
               firstLine.hasPrefix("GET ") else {
             sendResponse(client, status: "400 Bad Request", body: "Bad Request")
@@ -210,9 +204,11 @@ final class GoogleAuthService {
     private(set) var authError: String?
 
     private var codeVerifier: String?
+    private var expectedState: String?
     private var pendingAuthContinuation: CheckedContinuation<Void, Error>?
     private var callbackServer: OAuthHTTPServer?
     private var activeRefreshTasks: [String: Task<String, Error>] = [:]
+    private let refreshLock = NSLock()
 
     private init() {
         self.clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String ?? ""
@@ -233,8 +229,9 @@ final class GoogleAuthService {
         }
 
         let codeChallenge = generateCodeChallenge(from: verifier)
+        let state = generateCodeVerifier()
+        expectedState = state
 
-        // Start local HTTP server
         let server = OAuthHTTPServer()
         let started = server.start { [weak self] callbackURL in
             Task { @MainActor in
@@ -248,7 +245,6 @@ final class GoogleAuthService {
         }
         self.callbackServer = server
 
-        // Build OAuth URL
         var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
@@ -258,7 +254,8 @@ final class GoogleAuthService {
             URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
             URLQueryItem(name: "access_type", value: "offline"),
-            URLQueryItem(name: "prompt", value: "consent")
+            URLQueryItem(name: "prompt", value: "consent"),
+            URLQueryItem(name: "state", value: state)
         ]
 
         guard let url = components.url else {
@@ -267,10 +264,8 @@ final class GoogleAuthService {
             throw AuthError.invalidAuthURL
         }
 
-        // Open browser
         NSWorkspace.shared.open(url)
 
-        // Wait for callback
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             self.pendingAuthContinuation = continuation
         }
@@ -280,6 +275,8 @@ final class GoogleAuthService {
         isAuthenticating = false
         callbackServer?.stop()
         callbackServer = nil
+        codeVerifier = nil
+        expectedState = nil
         pendingAuthContinuation?.resume(throwing: AuthError.userCancelled)
         pendingAuthContinuation = nil
     }
@@ -301,18 +298,34 @@ final class GoogleAuthService {
             updateAccountStatus(accountID, status: .expired)
             throw AuthError.tokenExpired
         }
+        return try await coalescedRefresh(refreshToken: refreshToken, accountID: accountID)
+    }
+
+    private func coalescedRefresh(refreshToken: String, accountID: String) async throws -> String {
+        refreshLock.lock()
         if let existingTask = activeRefreshTasks[accountID] {
+            refreshLock.unlock()
             return try await existingTask.value
         }
         let task = Task<String, Error> {
-            defer { activeRefreshTasks.removeValue(forKey: accountID) }
+            defer {
+                refreshLock.lock()
+                activeRefreshTasks.removeValue(forKey: accountID)
+                refreshLock.unlock()
+            }
             return try await refreshAccessTokenWithRetry(refreshToken: refreshToken, accountID: accountID)
         }
         activeRefreshTasks[accountID] = task
+        refreshLock.unlock()
         return try await task.value
     }
 
     func disconnectAccount(_ accountID: String) throws {
+        refreshLock.lock()
+        activeRefreshTasks[accountID]?.cancel()
+        activeRefreshTasks.removeValue(forKey: accountID)
+        refreshLock.unlock()
+
         try? keychain.delete(key: "token_\(accountID)")
         accounts.removeAll { $0.id == accountID }
         if activeAccount?.id == accountID {
@@ -339,26 +352,37 @@ final class GoogleAuthService {
 
     private func handleOAuthCallback(_ urlString: String) {
         guard let url = URL(string: urlString),
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
-            isAuthenticating = false
-            authError = "Invalid callback"
-            callbackServer?.stop()
-            callbackServer = nil
-            pendingAuthContinuation?.resume(throwing: AuthError.invalidCallback)
-            pendingAuthContinuation = nil
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            completeAuthWithError(AuthError.invalidCallback, message: "Invalid callback")
+            return
+        }
+
+        let queryItems = components.queryItems ?? []
+
+        if let errorParam = queryItems.first(where: { $0.name == "error" })?.value {
+            let description = queryItems.first(where: { $0.name == "error_description" })?.value ?? errorParam
+            completeAuthWithError(AuthError.invalidCallback, message: description)
+            return
+        }
+
+        guard let returnedState = queryItems.first(where: { $0.name == "state" })?.value,
+              let savedState = expectedState, returnedState == savedState else {
+            completeAuthWithError(AuthError.invalidCallback, message: "State mismatch - possible CSRF")
+            return
+        }
+
+        guard let code = queryItems.first(where: { $0.name == "code" })?.value else {
+            completeAuthWithError(AuthError.invalidCallback, message: "Missing authorization code")
             return
         }
 
         guard let verifier = codeVerifier else {
-            isAuthenticating = false
-            authError = "Code verifier lost"
-            callbackServer?.stop()
-            callbackServer = nil
-            pendingAuthContinuation?.resume(throwing: AuthError.noCodeVerifier)
-            pendingAuthContinuation = nil
+            completeAuthWithError(AuthError.noCodeVerifier, message: "Code verifier lost")
             return
         }
+
+        expectedState = nil
+        codeVerifier = nil
 
         Task {
             do {
@@ -403,6 +427,17 @@ final class GoogleAuthService {
         }
     }
 
+    private func completeAuthWithError(_ error: AuthError, message: String) {
+        isAuthenticating = false
+        authError = message
+        codeVerifier = nil
+        expectedState = nil
+        callbackServer?.stop()
+        callbackServer = nil
+        pendingAuthContinuation?.resume(throwing: error)
+        pendingAuthContinuation = nil
+    }
+
     private func exchangeCodeForTokens(code: String, codeVerifier: String) async throws -> OAuthTokenResponse {
         var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
         request.httpMethod = "POST"
@@ -420,9 +455,13 @@ final class GoogleAuthService {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let msg = String(data: data, encoding: .utf8) ?? ""
-            print("[OAuth] Token exchange failed: \(msg)")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.tokenExchangeFailed
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let errorMessage = extractOAuthError(from: data)
+            print("[OAuth] Token exchange failed (\(httpResponse.statusCode)): \(errorMessage ?? "unknown")")
             throw AuthError.tokenExchangeFailed
         }
 
@@ -432,8 +471,11 @@ final class GoogleAuthService {
     private func refreshAccessTokenWithRetry(refreshToken: String, accountID: String, retries: Int = 3) async throws -> String {
         var lastError: Error?
         for attempt in 0..<retries {
+            if Task.isCancelled { throw AuthError.tokenRefreshFailed }
             do {
                 return try await refreshAccessToken(refreshToken: refreshToken, accountID: accountID)
+            } catch is CancellationError {
+                throw AuthError.tokenRefreshFailed
             } catch {
                 lastError = error
                 if attempt < retries - 1 {
@@ -459,7 +501,13 @@ final class GoogleAuthService {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.tokenRefreshFailed
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let errorMessage = extractOAuthError(from: data)
+            print("[OAuth] Token refresh failed (\(httpResponse.statusCode)): \(errorMessage ?? "unknown")")
             updateAccountStatus(accountID, status: .expired)
             throw AuthError.tokenRefreshFailed
         }
@@ -489,6 +537,11 @@ final class GoogleAuthService {
         }
 
         return try JSONDecoder().decode(OAuthUserInfo.self, from: data)
+    }
+
+    private func extractOAuthError(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["error_description"] as? String ?? json["error"] as? String
     }
 
     private func saveTokens(accountID: String, response: OAuthTokenResponse) throws {

@@ -4,8 +4,21 @@ import UserNotifications
 final class NotificationService {
     static let shared = NotificationService()
 
-    private(set) var permissionGranted = false
-    private var permissionChecked = false
+    private let lock = NSLock()
+    private var _permissionGranted = false
+    private var _permissionChecked = false
+
+    var permissionGranted: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _permissionGranted
+    }
+
+    var permissionChecked: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _permissionChecked
+    }
 
     private init() {
         registerNotificationCategories()
@@ -17,13 +30,17 @@ final class NotificationService {
             do {
                 let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
                 await MainActor.run {
-                    self.permissionGranted = granted
-                    self.permissionChecked = true
+                    self.lock.lock()
+                    self._permissionGranted = granted
+                    self._permissionChecked = true
+                    self.lock.unlock()
                 }
             } catch {
                 await MainActor.run {
-                    self.permissionGranted = false
-                    self.permissionChecked = true
+                    self.lock.lock()
+                    self._permissionGranted = false
+                    self._permissionChecked = true
+                    self.lock.unlock()
                 }
             }
         }
@@ -31,7 +48,12 @@ final class NotificationService {
 
     func checkPermissionStatus() async -> Bool {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        return settings.authorizationStatus == .authorized
+        let authorized = settings.authorizationStatus == .authorized
+        lock.lock()
+        _permissionGranted = authorized
+        _permissionChecked = true
+        lock.unlock()
+        return authorized
     }
 
     func isDoNotDisturbActive() async -> Bool {
@@ -68,7 +90,14 @@ final class NotificationService {
             options: []
         )
 
-        UNUserNotificationCenter.current().setNotificationCategories([uploadFailedCategory, batchCompleteCategory])
+        let accountReconnectCategory = UNNotificationCategory(
+            identifier: "ACCOUNT_RECONNECT",
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([uploadFailedCategory, batchCompleteCategory, accountReconnectCategory])
     }
 
     func handleNotificationResponse(_ response: UNNotificationResponse) -> (action: String, userInfo: [String: Any])? {
@@ -159,9 +188,10 @@ final class NotificationService {
         content.title = "Account Needs Reconnection"
         content.body = "Please reconnect \(accountEmail) to continue uploading."
         content.sound = .default
+        content.categoryIdentifier = "ACCOUNT_RECONNECT"
 
         let request = UNNotificationRequest(
-            identifier: "account-reconnect-\(UUID().uuidString)",
+            identifier: "account-reconnect-\(accountEmail)",
             content: content,
             trigger: nil
         )
@@ -208,12 +238,14 @@ final class NotificationService {
         }
     }
 
-    private func handleNotificationError(_ error: Error) {
+    func handleNotificationError(_ error: Error) {
         let nsError = error as NSError
         if nsError.domain == UNErrorDomain {
             switch nsError.code {
             case UNError.notificationsNotAllowed.rawValue:
-                permissionGranted = false
+                lock.lock()
+                _permissionGranted = false
+                lock.unlock()
             default:
                 break
             }
