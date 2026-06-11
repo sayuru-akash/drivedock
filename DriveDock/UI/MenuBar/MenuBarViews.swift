@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MenuBarIcon: View {
     @Environment(AppState.self) private var appState
@@ -25,6 +26,8 @@ struct MenuBarIcon: View {
 struct MenuBarPopoverView: View {
     @Environment(AppState.self) private var appState
     @State private var showFilePicker = false
+    @State private var isDropTargeted = false
+    @State private var droppedFiles: [URL] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -73,6 +76,80 @@ struct MenuBarPopoverView: View {
 
             Divider()
 
+            MenuBarDropZone(isDropTargeted: $isDropTargeted, droppedFiles: $droppedFiles)
+                .frame(height: 60)
+
+            Divider()
+
+            let recentCompleted = recentCompletedUploads
+            if !recentCompleted.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Recent Completions")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(recentCompleted) { item in
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                                .accessibilityHidden(true)
+                            Text(item.localFileName)
+                                .font(.caption)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Text(item.formattedSize)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Completed: \(item.localFileName), \(item.formattedSize)")
+                    }
+                }
+
+                Divider()
+            }
+
+            let accounts = appState.auth.accounts
+            if accounts.count > 1 {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Accounts")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(accounts) { account in
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(account.isActive ? Color.accentColor : Color.clear)
+                                .stroke(Color.secondary, lineWidth: account.isActive ? 0 : 1)
+                                .frame(width: 8, height: 8)
+                                .accessibilityHidden(true)
+                            Text(account.email)
+                                .font(.caption)
+                                .lineLimit(1)
+                                .foregroundStyle(account.isActive ? .primary : .secondary)
+                            Spacer()
+                            if account.isActive {
+                                Text("Active")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            appState.auth.setActiveAccount(account)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(account.email)\(account.isActive ? ", active" : "")")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Tap to switch to this account")
+                    }
+                }
+
+                Divider()
+            }
+
             HStack(spacing: 8) {
                 if !appState.engine.isProcessing && appState.engine.items.contains(where: { $0.status == .waiting }) {
                     Button {
@@ -116,7 +193,15 @@ struct MenuBarPopoverView: View {
             .accessibilityLabel("Quit DriveDock")
         }
         .padding()
-        .frame(width: 240)
+        .frame(width: 260)
+    }
+
+    private var recentCompletedUploads: [UploadItem] {
+        appState.engine.items
+            .filter { $0.status == .completed }
+            .sorted { ($0.completedDate ?? .distantPast) > ($1.completedDate ?? .distantPast) }
+            .prefix(5)
+            .map { $0 }
     }
 }
 
@@ -141,5 +226,69 @@ struct StatusRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label): \(count)")
+    }
+}
+
+struct MenuBarDropZone: View {
+    @Environment(AppState.self) private var appState
+    @Binding var isDropTargeted: Bool
+    @Binding var droppedFiles: [URL]
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isDropTargeted ? Color.accentColor.opacity(0.1) : Color.secondary.opacity(0.05))
+                .strokeBorder(
+                    isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.2),
+                    style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                )
+
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.up.doc")
+                    .font(.title3)
+                    .foregroundStyle(isDropTargeted ? Color.accentColor : Color.secondary)
+                    .accessibilityHidden(true)
+                Text("Drop files to upload")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleDrop(providers)
+        }
+        .accessibilityLabel("Drop zone for quick uploads")
+        .accessibilityHint("Drag and drop files here to upload them to Google Drive")
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        for provider in providers {
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, error in
+                guard let data = item as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                DispatchQueue.main.async {
+                    droppedFiles.append(url)
+                    if droppedFiles.count == providers.count {
+                        processFiles(droppedFiles)
+                        droppedFiles = []
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    private func processFiles(_ urls: [URL]) {
+        let files = FileDropHandler.processDroppedItems(urls)
+        guard !files.isEmpty else { return }
+
+        if let account = appState.auth.activeAccount {
+            _ = appState.engine.addFiles(
+                files: files,
+                destinationFolderID: "root",
+                destinationFolderName: "My Drive",
+                accountID: account.id
+            )
+            appState.engine.startProcessing()
+        }
     }
 }

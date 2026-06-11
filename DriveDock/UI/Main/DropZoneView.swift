@@ -7,10 +7,12 @@ struct DropZoneView: View {
     @State private var showFilePicker = false
     @State private var showFolderPicker = false
     @State private var showDestinationPicker = false
+    @State private var showUploadSummary = false
     @State private var droppedFiles: [URL] = []
     @State private var isAnimating = false
     @State private var glowOpacity: Double = 0
     @State private var selectedDestination: DriveFolder?
+    @State private var pendingFiles: [LocalFileInfo] = []
 
     var body: some View {
         VStack(spacing: 24) {
@@ -117,6 +119,18 @@ struct DropZoneView: View {
                 }
             }
         }
+        .sheet(isPresented: $showUploadSummary) {
+            UploadPlanSummaryView(
+                files: pendingFiles,
+                destinationName: selectedDestination?.name ?? "My Drive",
+                accountEmail: appState.auth.activeAccount?.email ?? "Unknown"
+            ) {
+                confirmUpload()
+            } onCancel: {
+                showUploadSummary = false
+                pendingFiles = []
+            }
+        }
         .fileImporter(
             isPresented: $showFilePicker,
             allowedContentTypes: [.data],
@@ -158,17 +172,25 @@ struct DropZoneView: View {
         let files = FileDropHandler.processDroppedItems(urls)
         guard !files.isEmpty else { return }
 
-        if let activeAccount = appState.auth.activeAccount {
-            let destinationID = selectedDestination?.id ?? "root"
-            let destinationName = selectedDestination?.name ?? "My Drive"
+        pendingFiles = files
+        showUploadSummary = true
+    }
 
-            let _ = appState.engine.addFiles(
-                files: files,
-                destinationFolderID: destinationID,
-                destinationFolderName: destinationName,
-                accountID: activeAccount.id
-            )
-            appState.engine.startProcessing()
-        }
+    private func confirmUpload() {
+        guard let account = appState.auth.activeAccount else { return }
+
+        let destinationID = selectedDestination?.id ?? "root"
+        let destinationName = selectedDestination?.name ?? "My Drive"
+
+        let _ = appState.engine.addFiles(
+            files: pendingFiles,
+            destinationFolderID: destinationID,
+            destinationFolderName: destinationName,
+            accountID: account.id
+        )
+        appState.engine.startProcessing()
+
+        showUploadSummary = false
+        pendingFiles = []
     }
 }

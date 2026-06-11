@@ -59,12 +59,15 @@ struct FileDropHandler {
             let fileSize = attrs[.size] as? Int64 ?? 0
             let mimeType = MIMETypeDetector.mimeType(for: fileName)
 
+            let bookmark = createSecurityScopedBookmark(for: url)
+
             return LocalFileInfo(
                 fileName: fileName,
                 filePath: resolvedPath,
                 fileSize: fileSize,
                 mimeType: mimeType,
-                relativePath: nil
+                relativePath: nil,
+                securityScopedBookmark: bookmark
             )
         } catch {
             return nil
@@ -104,12 +107,16 @@ struct FileDropHandler {
             let fileSize = attrs[.size] as? Int64 ?? 0
             let mimeType = MIMETypeDetector.mimeType(for: fileName)
 
+            let fileURL = URL(fileURLWithPath: fullPath)
+            let bookmark = createSecurityScopedBookmark(for: fileURL)
+
             files.append(LocalFileInfo(
                 fileName: fileName,
                 filePath: resolvedPath,
                 fileSize: fileSize,
                 mimeType: mimeType,
-                relativePath: relativePath
+                relativePath: relativePath,
+                securityScopedBookmark: bookmark
             ))
             runningSize += fileSize
             scanCount += 1
@@ -186,5 +193,33 @@ struct FileDropHandler {
             return resolved
         }
         return (path as NSString).deletingLastPathComponent + "/" + resolved
+    }
+
+    static func createSecurityScopedBookmark(for url: URL) -> Data? {
+        do {
+            return try url.bookmarkData(
+                options: [.withSecurityScope],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    static func resolveSecurityScopedBookmark(_ bookmark: Data) -> URL? {
+        do {
+            var isStale = false
+            let url = try URL(
+                resolvingBookmarkData: bookmark,
+                options: [.withSecurityScope],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+            if isStale { return nil }
+            return url
+        } catch {
+            return nil
+        }
     }
 }

@@ -1,7 +1,11 @@
 import SwiftUI
+import Network
 
 struct StatusBar: View {
     @Environment(AppState.self) private var appState
+    @State private var isOnline = true
+    @State private var monitor = NWPathMonitor()
+    @State private var monitorQueue = DispatchQueue(label: "NetworkMonitor")
 
     var body: some View {
         HStack(spacing: 16) {
@@ -53,7 +57,33 @@ struct StatusBar: View {
                     .accessibilityLabel("Speed: \(ByteCountFormatter.string(fromByteCount: Int64(appState.engine.totalSpeed), countStyle: .file)) per second")
             }
 
+            if remainingBytes > 0 {
+                Text(ByteCountFormatter.string(fromByteCount: remainingBytes, countStyle: .file) + " left")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("\(ByteCountFormatter.string(fromByteCount: remainingBytes, countStyle: .file)) remaining")
+            }
+
             Spacer()
+
+            if appState.engine.isProcessing, let eta = overallETA, eta > 0 {
+                Text("ETA: \(formattedETA(eta))")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Estimated time remaining: \(formattedETA(eta))")
+            }
+
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(isOnline ? Color.green : Color.red)
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+                Text(isOnline ? "Online" : "Offline")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Network: \(isOnline ? "Online" : "Offline")")
 
             if !appState.engine.items.isEmpty {
                 Text("\(appState.engine.completedCount)/\(appState.engine.items.count) files")
@@ -74,5 +104,36 @@ struct StatusBar: View {
         .background(.bar)
         .lineLimit(1)
         .accessibilityElement(children: .contain)
+        .onAppear {
+            startNetworkMonitor()
+        }
+    }
+
+    private var remainingBytes: Int64 {
+        appState.engine.items
+            .filter { $0.status == .uploading || $0.status == .waiting || $0.status == .paused }
+            .reduce(Int64(0)) { $0 + max(0, $1.fileSize - $1.uploadedBytes) }
+    }
+
+    private var overallETA: TimeInterval? {
+        let speed = appState.engine.totalSpeed
+        guard speed > 0 else { return nil }
+        return TimeInterval(Double(remainingBytes) / speed)
+    }
+
+    private func formattedETA(_ interval: TimeInterval) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .abbreviated
+        return formatter.string(from: interval) ?? "—"
+    }
+
+    private func startNetworkMonitor() {
+        monitor.pathUpdateHandler = { path in
+            DispatchQueue.main.async {
+                isOnline = path.status == .satisfied
+            }
+        }
+        monitor.start(queue: monitorQueue)
     }
 }

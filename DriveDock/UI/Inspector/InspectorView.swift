@@ -49,10 +49,12 @@ struct ItemInspectorContent: View {
                     DetailRow(label: "Size", value: item.formattedSize)
                     DetailRow(label: "Destination", value: item.destinationFolderName)
                     DetailRow(label: "Account", value: accountEmail)
+                    DetailRow(label: "Method", value: uploadMethod)
 
                     if item.status == .uploading {
                         DetailRow(label: "Progress", value: "\(item.progressPercent)%")
                         DetailRow(label: "Uploaded", value: item.formattedUploaded)
+                        DetailRow(label: "Remaining", value: formattedRemaining)
                         DetailRow(label: "Speed", value: item.formattedSpeed)
                         if let eta = item.eta, eta > 0 {
                             DetailRow(label: "ETA", value: formatETA(eta))
@@ -153,6 +155,20 @@ struct ItemInspectorContent: View {
 
     private var accountEmail: String {
         appState.auth.accounts.first { $0.id == item.accountID }?.email ?? "Unknown"
+    }
+
+    private var uploadMethod: String {
+        let threshold = Int64(5 * 1024 * 1024)
+        if item.fileSize < threshold {
+            return "Simple (< 5 MB)"
+        } else {
+            return "Resumable (≥ 5 MB)"
+        }
+    }
+
+    private var formattedRemaining: String {
+        let remaining = max(0, item.fileSize - item.uploadedBytes)
+        return ByteCountFormatter.string(fromByteCount: remaining, countStyle: .file)
     }
 
     private func formatETA(_ interval: TimeInterval) -> String {

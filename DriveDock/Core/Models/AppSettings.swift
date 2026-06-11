@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 enum UploadMode: String, Codable, CaseIterable {
     case balanced
@@ -96,13 +97,72 @@ enum AppTheme: String, Codable, CaseIterable {
     }
 }
 
+enum AccentStyle: String, Codable, CaseIterable {
+    case system
+    case blue
+    case purple
+    case green
+    case orange
+    case red
+
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .blue: return "Blue"
+        case .purple: return "Purple"
+        case .green: return "Green"
+        case .orange: return "Orange"
+        case .red: return "Red"
+        }
+    }
+
+    var tintColor: Color {
+        switch self {
+        case .system: return .accentColor
+        case .blue: return .blue
+        case .purple: return .purple
+        case .green: return .green
+        case .orange: return .orange
+        case .red: return .red
+        }
+    }
+}
+
+enum ChunkSizeOption: String, Codable, CaseIterable {
+    case auto
+    case mb4
+    case mb8
+    case mb16
+
+    var displayName: String {
+        switch self {
+        case .auto: return "Auto"
+        case .mb4: return "4 MB"
+        case .mb8: return "8 MB"
+        case .mb16: return "16 MB"
+        }
+    }
+
+    var bytes: Int {
+        switch self {
+        case .auto: return 0
+        case .mb4: return 4 * 1024 * 1024
+        case .mb8: return 8 * 1024 * 1024
+        case .mb16: return 16 * 1024 * 1024
+        }
+    }
+}
+
 @Observable
 final class AppSettings {
     var launchAtLogin: Bool = false
     var showMenuBarIcon: Bool = true
     var showDockIcon: Bool = true
     var theme: AppTheme = .system
+    var accentColor: AccentStyle = .system
     var confirmQuitWithActiveUploads: Bool = true
+    var defaultStartScreen: SidebarItem = .uploads
+    var defaultAccountID: String? = nil
 
     var defaultUploadMode: UploadMode = .balanced
     var defaultDestination: DestinationDefault = .askEveryTime
@@ -113,10 +173,16 @@ final class AppSettings {
     var autoRetryFailed: Bool = true
     var resumeOnLaunch: Bool = true
     var maxParallelUploads: Int = 3
+    var maxActiveUploads: Int = 3
     var bandwidthLimitKBps: Int = 0
 
     var notificationPreference: NotificationPreference = .allComplete
     var notifyOnErrors: Bool = true
+
+    var pauseOnMeteredNetwork: Bool = false
+    var pauseOnVPNChange: Bool = false
+
+    var chunkSize: ChunkSizeOption = .auto
 
     var maxRetryCount: Int = 5
     var debugLogsEnabled: Bool = false
@@ -136,7 +202,17 @@ final class AppSettings {
            let t = AppTheme(rawValue: themeStr) {
             theme = t
         }
+        if let accentStr = defaults.string(forKey: "settings.accentColor"),
+           let a = AccentStyle(rawValue: accentStr) {
+            accentColor = a
+        }
         confirmQuitWithActiveUploads = defaults.object(forKey: "settings.confirmQuit") as? Bool ?? true
+
+        if let startScreenStr = defaults.string(forKey: "settings.defaultStartScreen"),
+           let s = SidebarItem(rawValue: startScreenStr) {
+            defaultStartScreen = s
+        }
+        defaultAccountID = defaults.string(forKey: "settings.defaultAccountID")
 
         if let modeStr = defaults.string(forKey: "settings.uploadMode"),
            let m = UploadMode(rawValue: modeStr) {
@@ -157,6 +233,7 @@ final class AppSettings {
         autoRetryFailed = defaults.object(forKey: "settings.autoRetry") as? Bool ?? true
         resumeOnLaunch = defaults.object(forKey: "settings.resumeOnLaunch") as? Bool ?? true
         maxParallelUploads = defaults.object(forKey: "settings.maxParallel") as? Int ?? 3
+        maxActiveUploads = defaults.object(forKey: "settings.maxActiveUploads") as? Int ?? 3
         bandwidthLimitKBps = defaults.object(forKey: "settings.bandwidthLimit") as? Int ?? 0
 
         if let notifStr = defaults.string(forKey: "settings.notificationPref"),
@@ -164,6 +241,14 @@ final class AppSettings {
             notificationPreference = n
         }
         notifyOnErrors = defaults.object(forKey: "settings.notifyErrors") as? Bool ?? true
+
+        pauseOnMeteredNetwork = defaults.object(forKey: "settings.pauseOnMetered") as? Bool ?? false
+        pauseOnVPNChange = defaults.object(forKey: "settings.pauseOnVPN") as? Bool ?? false
+
+        if let chunkStr = defaults.string(forKey: "settings.chunkSize"),
+           let c = ChunkSizeOption(rawValue: chunkStr) {
+            chunkSize = c
+        }
 
         maxRetryCount = defaults.object(forKey: "settings.maxRetry") as? Int ?? 5
         debugLogsEnabled = defaults.bool(forKey: "settings.debugLogs")
@@ -175,7 +260,10 @@ final class AppSettings {
         defaults.set(showMenuBarIcon, forKey: "settings.showMenuBarIcon")
         defaults.set(showDockIcon, forKey: "settings.showDockIcon")
         defaults.set(theme.rawValue, forKey: "settings.theme")
+        defaults.set(accentColor.rawValue, forKey: "settings.accentColor")
         defaults.set(confirmQuitWithActiveUploads, forKey: "settings.confirmQuit")
+        defaults.set(defaultStartScreen.rawValue, forKey: "settings.defaultStartScreen")
+        defaults.set(defaultAccountID, forKey: "settings.defaultAccountID")
         defaults.set(defaultUploadMode.rawValue, forKey: "settings.uploadMode")
         defaults.set(defaultDestination.rawValue, forKey: "settings.destinationDefault")
         defaults.set(defaultDuplicateMode.rawValue, forKey: "settings.duplicateMode")
@@ -185,9 +273,13 @@ final class AppSettings {
         defaults.set(autoRetryFailed, forKey: "settings.autoRetry")
         defaults.set(resumeOnLaunch, forKey: "settings.resumeOnLaunch")
         defaults.set(maxParallelUploads, forKey: "settings.maxParallel")
+        defaults.set(maxActiveUploads, forKey: "settings.maxActiveUploads")
         defaults.set(bandwidthLimitKBps, forKey: "settings.bandwidthLimit")
         defaults.set(notificationPreference.rawValue, forKey: "settings.notificationPref")
         defaults.set(notifyOnErrors, forKey: "settings.notifyErrors")
+        defaults.set(pauseOnMeteredNetwork, forKey: "settings.pauseOnMetered")
+        defaults.set(pauseOnVPNChange, forKey: "settings.pauseOnVPN")
+        defaults.set(chunkSize.rawValue, forKey: "settings.chunkSize")
         defaults.set(maxRetryCount, forKey: "settings.maxRetry")
         defaults.set(debugLogsEnabled, forKey: "settings.debugLogs")
     }

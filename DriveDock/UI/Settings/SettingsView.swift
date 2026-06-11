@@ -101,6 +101,10 @@ struct SettingsView: View {
 struct GeneralSettingsView: View {
     @Environment(AppState.self) private var appState
 
+    private let startScreenOptions: [SidebarItem] = [
+        .uploads, .queue, .active, .completed, .failed, .history
+    ]
+
     var body: some View {
         @Bindable var settings = appState.settings
 
@@ -112,6 +116,18 @@ struct GeneralSettingsView: View {
                     }
                 }
 
+                Picker("Accent color", selection: $settings.accentColor) {
+                    ForEach(AccentStyle.allCases, id: \.self) { style in
+                        HStack {
+                            Circle()
+                                .fill(style.tintColor)
+                                .frame(width: 10, height: 10)
+                            Text(style.displayName)
+                        }
+                        .tag(style)
+                    }
+                }
+
                 Toggle("Show menu bar icon", isOn: $settings.showMenuBarIcon)
                 Toggle("Show Dock icon", isOn: $settings.showDockIcon)
             }
@@ -119,14 +135,23 @@ struct GeneralSettingsView: View {
             Section("Behavior") {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
                 Toggle("Confirm before quitting with active uploads", isOn: $settings.confirmQuitWithActiveUploads)
+
+                Picker("Default start screen", selection: $settings.defaultStartScreen) {
+                    ForEach(startScreenOptions, id: \.self) { item in
+                        Label(item.displayName, systemImage: item.systemImage)
+                            .tag(item)
+                    }
+                }
             }
         }
         .formStyle(.grouped)
         .onChange(of: settings.theme) { _, _ in settings.save() }
+        .onChange(of: settings.accentColor) { _, _ in settings.save() }
         .onChange(of: settings.showMenuBarIcon) { _, _ in settings.save() }
         .onChange(of: settings.showDockIcon) { _, _ in settings.save() }
         .onChange(of: settings.launchAtLogin) { _, _ in settings.save() }
         .onChange(of: settings.confirmQuitWithActiveUploads) { _, _ in settings.save() }
+        .onChange(of: settings.defaultStartScreen) { _, _ in settings.save() }
     }
 }
 
@@ -271,6 +296,13 @@ struct NetworkSettingsView: View {
                 }
             }
 
+            Section("Network Conditions") {
+                Toggle("Pause on metered network", isOn: $settings.pauseOnMeteredNetwork)
+                    .help("Automatically pause uploads when connected to a metered or cellular network")
+                Toggle("Pause on VPN change", isOn: $settings.pauseOnVPNChange)
+                    .help("Pause uploads when the VPN connection changes")
+            }
+
             Section("Notifications") {
                 Picker("Notify me", selection: $settings.notificationPreference) {
                     ForEach(NotificationPreference.allCases, id: \.self) { pref in
@@ -285,6 +317,8 @@ struct NetworkSettingsView: View {
         .onChange(of: settings.bandwidthLimitKBps) { _, _ in settings.save() }
         .onChange(of: settings.notificationPreference) { _, _ in settings.save() }
         .onChange(of: settings.notifyOnErrors) { _, _ in settings.save() }
+        .onChange(of: settings.pauseOnMeteredNetwork) { _, _ in settings.save() }
+        .onChange(of: settings.pauseOnVPNChange) { _, _ in settings.save() }
     }
 }
 
@@ -293,6 +327,8 @@ struct NetworkSettingsView: View {
 struct PrivacySettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var showClearConfirmation = false
+    @State private var showRemoveTokensConfirmation = false
+    @State private var localDataInfo: (files: [String], totalSize: String) = ([], "")
 
     var body: some View {
         Form {
@@ -301,10 +337,41 @@ struct PrivacySettingsView: View {
                     appState.persistence.clearHistory()
                 }
 
+                Button("Clear queue cache") {
+                    appState.engine.clearCompleted()
+                    appState.persistence.saveQueue([])
+                    appState.persistence.saveBatches([])
+                }
+
                 Button("Clear all local data") {
                     showClearConfirmation = true
                 }
                 .foregroundStyle(.red)
+            }
+
+            Section("Data Stored Locally") {
+                if localDataInfo.files.isEmpty {
+                    Text("No local data files found")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(localDataInfo.files, id: \.self) { fileName in
+                        HStack {
+                            Image(systemName: "doc.fill")
+                                .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                            Text(fileName)
+                            Spacer()
+                        }
+                    }
+
+                    HStack {
+                        Text("Total size")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(localDataInfo.totalSize)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section("Security") {
@@ -312,21 +379,66 @@ struct PrivacySettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                Button("Remove all tokens from Keychain") {
+                    showRemoveTokensConfirmation = true
+                }
+                .foregroundStyle(.red)
+
                 Text("DriveDock does not include analytics or tracking.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            loadLocalDataInfo()
+        }
         .alert("Clear All Local Data", isPresented: $showClearConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Clear Everything", role: .destructive) {
                 appState.engine.pauseAll()
                 appState.persistence.clearAllLocalData()
+                loadLocalDataInfo()
             }
         } message: {
             Text("This will remove all upload history, queue data, and cached settings. OAuth tokens in Keychain will not be affected.")
         }
+        .alert("Remove All Tokens", isPresented: $showRemoveTokensConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove All Tokens", role: .destructive) {
+                try? KeychainService.shared.deleteAll()
+                loadLocalDataInfo()
+            }
+        } message: {
+            Text("This will remove all OAuth tokens from Keychain. You will need to reconnect your Google accounts.")
+        }
+    }
+
+    private func loadLocalDataInfo() {
+        let fm = FileManager.default
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("DriveDock")
+
+        guard let contents = try? fm.contentsOfDirectory(atPath: appSupport.path) else {
+            localDataInfo = ([], "")
+            return
+        }
+
+        let jsonFiles = contents.filter { $0.hasSuffix(".json") }
+        var totalSize: Int64 = 0
+
+        for file in jsonFiles {
+            let fileURL = appSupport.appendingPathComponent(file)
+            if let attrs = try? fm.attributesOfItem(atPath: fileURL.path),
+               let size = attrs[.size] as? Int64 {
+                totalSize += size
+            }
+        }
+
+        localDataInfo = (
+            jsonFiles,
+            ByteCountFormatter.string(fromByteCount: totalSize, countStyle: .file)
+        )
     }
 }
 
@@ -341,6 +453,16 @@ struct AdvancedSettingsView: View {
         Form {
             Section("Upload") {
                 Stepper("Max retry count: \(settings.maxRetryCount)", value: $settings.maxRetryCount, in: 1...20)
+
+                Stepper("Max active uploads: \(settings.maxActiveUploads)", value: $settings.maxActiveUploads, in: 1...10)
+                    .help("Maximum number of concurrent uploads, overrides upload mode")
+
+                Picker("Chunk size", selection: $settings.chunkSize) {
+                    ForEach(ChunkSizeOption.allCases, id: \.self) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .help("Size of each upload chunk. Auto uses 8 MB for files ≥ 5 MB.")
             }
 
             Section("Debug") {
@@ -362,6 +484,8 @@ struct AdvancedSettingsView: View {
         }
         .formStyle(.grouped)
         .onChange(of: settings.maxRetryCount) { _, _ in settings.save() }
+        .onChange(of: settings.maxActiveUploads) { _, _ in settings.save() }
+        .onChange(of: settings.chunkSize) { _, _ in settings.save() }
         .onChange(of: settings.debugLogsEnabled) { _, _ in settings.save() }
     }
 }

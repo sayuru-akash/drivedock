@@ -14,6 +14,12 @@ struct DetailView: View {
                 FilteredQueueView(statusFilter: statusFilter)
             case .myDrive:
                 DriveBrowserView()
+            case .sharedDrives:
+                SharedDrivesView()
+            case .recentDestinations:
+                RecentDestinationsView()
+            case .starredDestinations:
+                StarredDestinationsView()
             case .history:
                 HistoryView()
             case .settings:

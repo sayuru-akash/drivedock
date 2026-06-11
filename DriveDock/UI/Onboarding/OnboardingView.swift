@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var currentStep: OnboardingStep = .welcome
     @State private var authError: String?
 
@@ -40,7 +41,7 @@ struct OnboardingView: View {
                         .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.3), value: currentStep)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: currentStep)
         }
         .frame(minWidth: 500, minHeight: 400)
         .onChange(of: appState.auth.accounts.count) { _, newCount in
@@ -89,6 +90,7 @@ struct WelcomeStep: View {
     let onConnect: () -> Void
     let onSkip: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isPulsing = false
 
     var body: some View {
@@ -105,7 +107,7 @@ struct WelcomeStep: View {
                     ))
                     .scaleEffect(isPulsing ? 1.05 : 0.95)
                     .animation(
-                        .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
+                        reduceMotion ? nil : .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
                         value: isPulsing
                     )
                     .onAppear { isPulsing = true }
@@ -219,6 +221,7 @@ struct ConnectingStep: View {
 
 struct ReadyStep: View {
     let onContinue: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAnimating = false
 
     var body: some View {
@@ -231,7 +234,7 @@ struct ReadyStep: View {
                     .foregroundStyle(.green)
                     .scaleEffect(isAnimating ? 1.0 : 0.5)
                     .opacity(isAnimating ? 1.0 : 0.0)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.6), value: isAnimating)
+                    .animation(reduceMotion ? nil : .spring(response: 0.6, dampingFraction: 0.6), value: isAnimating)
                     .onAppear { isAnimating = true }
 
                 Text("You're All Set!")

@@ -64,6 +64,8 @@
 		A10063 /* DownloadEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10063; };
 		A10064 /* DownloadLocationPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10064; };
 		A10065 /* DownloadFolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10065; };
+		A10066 /* UploadPlanSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10066; };
+		AABB00112233445566000002 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB00112233445566000001 /* NetworkMonitor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -123,12 +125,14 @@
 		B10063 /* DownloadEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadEngine.swift; sourceTree = "<group>"; };
 		B10064 /* DownloadLocationPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadLocationPicker.swift; sourceTree = "<group>"; };
 		B10065 /* DownloadFolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadFolderManager.swift; sourceTree = "<group>"; };
+		B10066 /* UploadPlanSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadPlanSummaryView.swift; sourceTree = "<group>"; };
 		D10002 /* DriveDockTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DriveDockTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C10002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C10003 /* DriveDock.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DriveDock.entitlements; sourceTree = "<group>"; };
 		C10010 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		D10001 /* DriveDock.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DriveDock.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AABB00112233445566000001 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXContainerItemProxy section */
@@ -231,6 +235,7 @@
 				F10014 /* Persistence */,
 				F10015 /* Notifications */,
 				F10016 /* FileAccess */,
+				AABB00112233445566000001 /* NetworkMonitor.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -325,6 +330,7 @@
 				B10019 /* DetailView.swift */,
 				B10020 /* UploadsOverviewView.swift */,
 				B10021 /* DropZoneView.swift */,
+				B10066 /* UploadPlanSummaryView.swift */,
 			);
 			path = Main;
 			sourceTree = "<group>";
@@ -579,6 +585,8 @@
 				A10063 /* DownloadEngine.swift in Sources */,
 				A10064 /* DownloadLocationPicker.swift in Sources */,
 				A10065 /* DownloadFolderManager.swift in Sources */,
+				A10066 /* UploadPlanSummaryView.swift in Sources */,
+				AABB00112233445566000002 /* NetworkMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

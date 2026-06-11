@@ -3,6 +3,7 @@ import SwiftUI
 struct AnimatedProgressView: View {
     let progress: Double
     let color: Color
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(progress: Double, color: Color = .accentColor) {
         self.progress = progress
@@ -19,7 +20,7 @@ struct AnimatedProgressView: View {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(color)
                     .frame(width: geometry.size.width * progress, height: 8)
-                    .animation(.easeInOut(duration: 0.3), value: progress)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: progress)
             }
         }
         .frame(height: 8)
@@ -30,6 +31,7 @@ struct AnimatedProgressView: View {
 
 struct PulsingDot: View {
     let color: Color
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAnimating = false
 
     var body: some View {
@@ -39,7 +41,7 @@ struct PulsingDot: View {
             .scaleEffect(isAnimating ? 1.2 : 0.8)
             .opacity(isAnimating ? 1.0 : 0.6)
             .animation(
-                .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
+                reduceMotion ? nil : .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
                 value: isAnimating
             )
             .onAppear { isAnimating = true }
@@ -49,17 +51,18 @@ struct PulsingDot: View {
 
 struct SmoothCounter: View {
     let value: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var displayValue: Int = 0
 
     var body: some View {
         Text("\(displayValue)")
             .onAppear {
-                withAnimation(.easeOut(duration: 0.5)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.5)) {
                     displayValue = value
                 }
             }
             .onChange(of: value) { _, newValue in
-                withAnimation(.easeOut(duration: 0.3)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) {
                     displayValue = newValue
                 }
             }
@@ -85,6 +88,7 @@ struct GlassCard<Content: View>: View {
 
 struct FadeInView<Content: View>: View {
     let content: Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isVisible = false
 
     init(@ViewBuilder content: () -> Content) {
@@ -95,7 +99,7 @@ struct FadeInView<Content: View>: View {
         content
             .opacity(isVisible ? 1 : 0)
             .offset(y: isVisible ? 0 : 10)
-            .animation(.easeOut(duration: 0.3), value: isVisible)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: isVisible)
             .onAppear { isVisible = true }
     }
 }

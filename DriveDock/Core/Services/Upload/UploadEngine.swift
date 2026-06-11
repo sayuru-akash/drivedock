@@ -1,5 +1,6 @@
 import Foundation
-import Combine
+import AppKit
+import Network
 
 enum UploadEngineError: LocalizedError {
     case itemNotFound
@@ -44,8 +45,150 @@ final class UploadEngine {
 
     private let chunkSize = 8 * 1024 * 1024 // 8MB chunks
 
+    // MARK: - Adaptive Concurrency
+
+    private var errorTimestamps: [Date] = []
+    private var rateLimitHitDate: Date?
+    private var currentConcurrencyOverride: Int?
+    private let errorWindowSeconds: TimeInterval = 60
+    private let lowErrorWindowSeconds: TimeInterval = 30
+    private let highErrorThreshold: Double = 0.30
+    private let lowErrorThreshold: Double = 0.10
+    private var lowErrorSince: Date?
+
+    // MARK: - Sleep/Wake
+
+    private var isSleeping = false
+
+    private var effectiveMaxConcurrency: Int {
+        let modeMax = AppSettings.shared.defaultUploadMode.maxConcurrentUploads
+        if let override = currentConcurrencyOverride {
+            return min(override, modeMax)
+        }
+        return modeMax
+    }
+
     private init() {
         loadPersistedState()
+        setupSleepWakeNotifications()
+        setupNetworkMonitoring()
+    }
+
+    // MARK: - Sleep/Wake Detection
+
+    private func setupSleepWakeNotifications() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(handleWillSleep),
+            name: NSWorkspace.willSleepNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(handleDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleWillSleep() {
+        isSleeping = true
+        if isProcessing {
+            pauseAll()
+            for index in items.indices {
+                if items[index].status == .paused {
+                    items[index].errorMessage = "Paused (Mac sleeping)"
+                }
+            }
+            persistence.saveQueue(items)
+        }
+    }
+
+    @objc private func handleDidWake() {
+        isSleeping = false
+        Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await MainActor.run {
+                for index in self.items.indices {
+                    if self.items[index].status == .paused && self.items[index].errorMessage == "Paused (Mac sleeping)" {
+                        self.items[index].status = .waiting
+                        self.items[index].errorMessage = nil
+                    }
+                }
+                self.persistence.saveQueue(self.items)
+                self.startProcessing()
+            }
+        }
+    }
+
+    // MARK: - Network Monitoring
+
+    private func setupNetworkMonitoring() {
+        let monitor = NetworkMonitor.shared
+        monitor.onConnectionLost = { [weak self] in
+            guard let self, self.isProcessing else { return }
+            self.pauseAll()
+        }
+        monitor.onConnectionRestored = { [weak self] in
+            guard let self else { return }
+            let hasWaiting = self.items.contains { $0.status == .paused }
+            if hasWaiting {
+                self.resumeAll()
+            }
+        }
+    }
+
+    // MARK: - Adaptive Concurrency Helpers
+
+    private func recordError() {
+        let now = Date()
+        errorTimestamps.append(now)
+        errorTimestamps = errorTimestamps.filter { now.timeIntervalSince($0) <= errorWindowSeconds }
+        adjustConcurrency()
+    }
+
+    private func record429() {
+        rateLimitHitDate = Date()
+        currentConcurrencyOverride = 1
+    }
+
+    private func adjustConcurrency() {
+        let now = Date()
+        let recentErrors = errorTimestamps.filter { now.timeIntervalSince($0) <= errorWindowSeconds }
+        let totalRecent = Double(recentErrors.count)
+
+        guard totalRecent > 0 else {
+            if lowErrorSince == nil {
+                lowErrorSince = now
+            } else if now.timeIntervalSince(lowErrorSince!) >= lowErrorWindowSeconds {
+                if let override = currentConcurrencyOverride, override < AppSettings.shared.defaultUploadMode.maxConcurrentUploads {
+                    currentConcurrencyOverride = override + 1
+                    lowErrorSince = now
+                }
+            }
+            return
+        }
+
+        let errorRate = totalRecent / max(totalRecent, 1)
+        if errorRate > highErrorThreshold {
+            let current = currentConcurrencyOverride ?? effectiveMaxConcurrency
+            currentConcurrencyOverride = max(1, current - 1)
+            lowErrorSince = nil
+        } else if errorRate < lowErrorThreshold {
+            if lowErrorSince == nil {
+                lowErrorSince = now
+            }
+        } else {
+            lowErrorSince = nil
+        }
+    }
+
+    private func check429Recovery() {
+        guard let hitDate = rateLimitHitDate else { return }
+        if Date().timeIntervalSince(hitDate) >= 60 {
+            rateLimitHitDate = nil
+            currentConcurrencyOverride = nil
+        }
     }
 
     // MARK: - Queue Actions
@@ -93,7 +236,8 @@ final class UploadEngine {
                 createdDate: Date(),
                 lastActivityDate: Date(),
                 isFolder: false,
-                duplicateHandling: duplicateHandling
+                duplicateHandling: duplicateHandling,
+                securityScopedBookmark: file.securityScopedBookmark
             )
             items.append(item)
             itemIDs.append(item.id)
@@ -161,7 +305,8 @@ final class UploadEngine {
                 filePath: fullPath,
                 fileSize: fileSize,
                 mimeType: mimeType,
-                relativePath: relativePath
+                relativePath: relativePath,
+                securityScopedBookmark: nil
             ))
             totalSize += fileSize
         }
@@ -201,7 +346,8 @@ final class UploadEngine {
                 lastActivityDate: Date(),
                 isFolder: false,
                 folderPath: file.relativePath,
-                duplicateHandling: duplicateHandling
+                duplicateHandling: duplicateHandling,
+                securityScopedBookmark: file.securityScopedBookmark
             )
             items.append(item)
             itemIDs.append(item.id)
@@ -358,8 +504,8 @@ final class UploadEngine {
     private func processQueue() {
         Task {
             while isProcessing {
-                let settings = AppSettings.shared
-                let maxConcurrent = settings.defaultUploadMode.maxConcurrentUploads
+                check429Recovery()
+                let maxConcurrent = effectiveMaxConcurrency
                 let activeCount = activeTasks.count
 
                 guard activeCount < maxConcurrent else {
@@ -421,9 +567,24 @@ final class UploadEngine {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
 
         let item = items[index]
-        let fileURL = URL(fileURLWithPath: item.localFilePath)
+        var fileURL = URL(fileURLWithPath: item.localFilePath)
+        var didAccessSecurityScope = false
 
-        guard FileManager.default.fileExists(atPath: item.localFilePath) else {
+        if let bookmark = item.securityScopedBookmark,
+           let resolvedURL = FileDropHandler.resolveSecurityScopedBookmark(bookmark) {
+            if resolvedURL.startAccessingSecurityScopedResource() {
+                didAccessSecurityScope = true
+                fileURL = resolvedURL
+            }
+        }
+
+        defer {
+            if didAccessSecurityScope {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
             await MainActor.run {
                 self.items[index].status = .failed
                 self.items[index].errorMessage = "Local file not found"
@@ -484,6 +645,11 @@ final class UploadEngine {
                 self.updateTotalSpeed()
                 self.persistence.saveQueue(self.items)
 
+                self.recordError()
+                if errorCategory == .quotaRateLimit {
+                    self.record429()
+                }
+
                 if !errorCategory.isRetryable {
                     self.notifications.sendUploadFailedNotification(
                         fileName: self.items[index].localFileName,
@@ -500,10 +666,17 @@ final class UploadEngine {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
         let item = items[index]
 
+        let resolvedName = try await resolveDuplicateHandling(
+            fileName: item.localFileName,
+            destinationFolderID: item.destinationFolderID,
+            accountID: item.accountID,
+            duplicateHandling: item.duplicateHandling
+        )
+
         let fileData = try Data(contentsOf: fileURL)
         let file = try await driveAPI.simpleUpload(
             fileData: fileData,
-            fileName: item.localFileName,
+            fileName: resolvedName,
             mimeType: item.mimeType,
             parentFolderID: item.destinationFolderID,
             accountID: item.accountID
@@ -519,8 +692,15 @@ final class UploadEngine {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
         let item = items[index]
 
-        let session = try await driveAPI.initiateResumableUpload(
+        let resolvedName = try await resolveDuplicateHandling(
             fileName: item.localFileName,
+            destinationFolderID: item.destinationFolderID,
+            accountID: item.accountID,
+            duplicateHandling: item.duplicateHandling
+        )
+
+        let session = try await driveAPI.initiateResumableUpload(
+            fileName: resolvedName,
             fileSize: item.fileSize,
             mimeType: item.mimeType,
             parentFolderID: item.destinationFolderID,
@@ -627,6 +807,72 @@ final class UploadEngine {
         }
     }
 
+    // MARK: - Duplicate Handling
+
+    private func resolveDuplicateHandling(
+        fileName: String,
+        destinationFolderID: String,
+        accountID: String,
+        duplicateHandling: DuplicateMode
+    ) async throws -> String {
+        switch duplicateHandling {
+        case .keepBoth:
+            return fileName
+
+        case .skipExisting:
+            let existing = try await driveAPI.checkDuplicate(
+                fileName: fileName,
+                parentFolderID: destinationFolderID,
+                accountID: accountID
+            )
+            if !existing.isEmpty {
+                throw UploadEngineError.uploadFailed("Skipped: file already exists")
+            }
+            return fileName
+
+        case .replaceExisting:
+            let existing = try await driveAPI.checkDuplicate(
+                fileName: fileName,
+                parentFolderID: destinationFolderID,
+                accountID: accountID
+            )
+            if let match = existing.first {
+                await MainActor.run {
+                    if let idx = self.items.firstIndex(where: { $0.localFileName == fileName && $0.destinationFolderID == destinationFolderID }) {
+                        self.items[idx].driveFileID = match.id
+                    }
+                }
+                throw UploadEngineError.uploadFailed("Replace not yet supported via re-upload")
+            }
+            return fileName
+
+        case .renameNew:
+            let existing = try await driveAPI.checkDuplicate(
+                fileName: fileName,
+                parentFolderID: destinationFolderID,
+                accountID: accountID
+            )
+            guard !existing.isEmpty else { return fileName }
+
+            let nameWithoutExt = (fileName as NSString).deletingPathExtension
+            let ext = (fileName as NSString).pathExtension
+            var candidate: String
+            var counter = 2
+            repeat {
+                candidate = ext.isEmpty ? "\(nameWithoutExt) \(counter)" : "\(nameWithoutExt) \(counter).\(ext)"
+                let collisions = try await driveAPI.checkDuplicate(
+                    fileName: candidate,
+                    parentFolderID: destinationFolderID,
+                    accountID: accountID
+                )
+                if collisions.isEmpty { return candidate }
+                counter += 1
+            } while counter < 1000
+
+            return candidate
+        }
+    }
+
     // MARK: - Error Classification
 
     private func classifyError(_ error: Error) -> ErrorCategory {
@@ -711,6 +957,17 @@ final class UploadEngine {
     private func loadPersistedState() {
         items = persistence.loadQueue()
         batches = persistence.loadBatches()
+
+        for index in items.indices {
+            if items[index].status == .uploading && items[index].resumableSessionURL != nil {
+                items[index].status = .waiting
+                items[index].progress = 0
+                items[index].uploadedBytes = 0
+                items[index].speed = 0
+            }
+        }
+
+        persistence.saveQueue(items)
     }
 
     func saveState() {
@@ -751,4 +1008,5 @@ struct LocalFileInfo {
     let fileSize: Int64
     let mimeType: String
     let relativePath: String?
+    let securityScopedBookmark: Data?
 }

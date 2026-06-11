@@ -18,63 +18,36 @@ struct UploadQueueView: View {
                     Text("Drop files or folders to start uploading.")
                 }
             } else {
-                Table(filteredItems, selection: $selectedItems, sortOrder: $sortOrder) {
-                    TableColumn("Status") { item in
-                        StatusBadge(status: item.status)
-                    }
-                    .width(min: 80, ideal: 100)
-
-                    TableColumn("Name", value: \.localFileName) { item in
-                        HStack(spacing: 8) {
-                            Image(systemName: item.isFolder ? "folder.fill" : fileIcon(for: item.mimeType))
-                                .foregroundStyle(item.isFolder ? Color.accentColor : Color.secondary)
-                                .accessibilityHidden(true)
-                            Text(item.localFileName)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                List(selection: $selectedItems) {
+                    ForEach(groupedSections, id: \.status) { section in
+                        Section {
+                            ForEach(section.items) { item in
+                                QueueItemRow(item: item)
+                                    .tag(item.id)
+                                    .contextMenu {
+                                        ItemContextMenu(item: item)
+                                    }
+                            }
+                        } header: {
+                            HStack(spacing: 6) {
+                                Image(systemName: section.status.systemImage)
+                                    .font(.caption)
+                                    .foregroundStyle(section.color)
+                                    .accessibilityHidden(true)
+                                Text(section.status.displayName)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(section.items.count)")
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(section.status.displayName): \(section.items.count) items")
                         }
                     }
-                    .width(min: 200, ideal: 300)
-
-                    TableColumn("Size", value: \.formattedSize) { item in
-                        Text(item.formattedSize)
-                            .foregroundStyle(.secondary)
-                    }
-                    .width(min: 70, ideal: 90)
-
-                    TableColumn("Progress") { item in
-                        if item.status == .uploading {
-                            ProgressView(value: item.progress)
-                                .progressViewStyle(.linear)
-                                .accessibilityLabel("Upload progress: \(item.progressPercent) percent")
-                        } else if item.status == .completed {
-                            Text("100%")
-                                .foregroundStyle(.green)
-                        } else {
-                            Text(item.progressPercent, format: .percent)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .width(min: 100, ideal: 150)
-
-                    TableColumn("Speed") { item in
-                        Text(item.formattedSpeed)
-                            .foregroundStyle(.secondary)
-                    }
-                    .width(min: 70, ideal: 90)
-
-                    TableColumn("Destination", value: \.destinationFolderName) { item in
-                        Text(item.destinationFolderName)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .width(min: 100, ideal: 150)
-
-                    TableColumn("Actions") { item in
-                        ItemActionsMenu(item: item)
-                    }
-                    .width(min: 40, ideal: 50)
                 }
+                .listStyle(.inset(alternatesRowBackgrounds: true))
                 .contextMenu(forSelectionType: String.self) { items in
                     if let itemID = items.first,
                        let item = appState.engine.items.first(where: { $0.id == itemID }) {
@@ -105,6 +78,15 @@ struct UploadQueueView: View {
         appState.engine.items.sorted(using: sortOrder)
     }
 
+    private var groupedSections: [UploadGroupedSection] {
+        let statuses: [UploadItemStatus] = [.uploading, .waiting, .paused, .completed, .failed]
+        return statuses.compactMap { status in
+            let items = filteredItems.filter { $0.status == status }
+            guard !items.isEmpty else { return nil }
+            return UploadGroupedSection(status: status, items: items)
+        }
+    }
+
     private func removeSelectedItems() {
         let idsToRemove = selectedItems
         selectedItems.removeAll()
@@ -112,14 +94,21 @@ struct UploadQueueView: View {
             appState.engine.removeItem(itemID)
         }
     }
+}
 
-    private func fileIcon(for mimeType: String) -> String {
-        if mimeType.hasPrefix("image/") { return "photo" }
-        if mimeType.hasPrefix("video/") { return "video" }
-        if mimeType.hasPrefix("audio/") { return "music.note" }
-        if mimeType.contains("pdf") { return "doc.text" }
-        if mimeType.contains("zip") || mimeType.contains("archive") { return "archivebox" }
-        return "doc"
+struct UploadGroupedSection {
+    let status: UploadItemStatus
+    let items: [UploadItem]
+
+    var color: Color {
+        switch status {
+        case .uploading: return .blue
+        case .waiting: return .secondary
+        case .paused: return .yellow
+        case .completed: return .green
+        case .failed: return .red
+        default: return .secondary
+        }
     }
 }
 

@@ -10,6 +10,7 @@ struct DriveDockApp: App {
                 .environment(appState)
                 .frame(minWidth: 900, minHeight: 600)
                 .preferredColorScheme(colorSchemeForTheme(appState.settings.theme))
+                .tint(appState.settings.accentColor == .system ? nil : appState.settings.accentColor.tintColor)
                 .onAppear {
                     configureAppearance()
                 }
@@ -109,6 +110,13 @@ struct DriveDockApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+
+            CommandMenu("Edit") {
+                Button("Paste Files from Clipboard") {
+                    pasteFilesFromClipboard()
+                }
+                .keyboardShortcut("v", modifiers: .command)
+            }
         }
 
         MenuBarExtra {
@@ -168,6 +176,24 @@ struct DriveDockApp: App {
                 )
                 appState.engine.startProcessing()
             }
+        }
+    }
+
+    private func pasteFilesFromClipboard() {
+        let pasteboard = NSPasteboard.general
+        guard let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [
+            .urlReadingContentsConformToTypes: ["public.item"]
+        ]) as? [URL], !urls.isEmpty else { return }
+
+        let files = FileDropHandler.processDroppedItems(urls)
+        if let account = appState.auth.activeAccount, !files.isEmpty {
+            _ = appState.engine.addFiles(
+                files: files,
+                destinationFolderID: "root",
+                destinationFolderName: "My Drive",
+                accountID: account.id
+            )
+            appState.engine.startProcessing()
         }
     }
 }

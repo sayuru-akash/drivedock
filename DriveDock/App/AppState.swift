@@ -10,6 +10,7 @@ final class AppState {
     let settings = AppSettings.shared
     let persistence = PersistenceService.shared
     let notifications = NotificationService.shared
+    let networkMonitor = NetworkMonitor.shared
 
     var hasCompletedOnboarding: Bool = UserDefaults.standard.bool(forKey: "app.hasCompletedOnboarding") {
         didSet {

@@ -78,6 +78,7 @@ struct UploadItem: Identifiable, Codable {
     var isFolder: Bool
     var folderPath: String?
     var duplicateHandling: DuplicateMode
+    var securityScopedBookmark: Data?
 
     var progressPercent: Int {
         Int(progress * 100)
@@ -160,17 +161,28 @@ enum ErrorCategory: String, Codable, CaseIterable {
 
     var userAction: String {
         switch self {
-        case .network: return "Check your internet connection and try again."
-        case .quotaRateLimit: return "DriveDock will retry automatically. You can also try later."
-        case .authentication: return "Reconnect your Google account in Settings."
-        case .permission: return "Check that you have access to this destination."
-        case .destinationMissing: return "Choose a different destination folder."
-        case .localFileMissing: return "The file may have been moved or deleted."
-        case .fileChanged: return "The file was modified during upload. Try again."
-        case .fileTooLarge: return "This file exceeds Google Drive's size limit."
-        case .storageQuotaExceeded: return "Free up space in your Google Drive."
-        case .sharedDriveRestriction: return "You may not have upload permission for this Shared Drive."
-        case .unknown: return "Try again. If the problem persists, check your connection."
+        case .network:
+            return "Your internet connection was interrupted. DriveDock will retry automatically when connectivity returns."
+        case .quotaRateLimit:
+            return "Google is slowing requests right now. DriveDock is pausing briefly and will resume automatically."
+        case .authentication:
+            return "This account needs to be reconnected. Go to Settings \u{203A} Accounts to reconnect it."
+        case .permission:
+            return "You don\u{2019}t have permission to upload to this location. Try a different folder or ask the owner for access."
+        case .destinationMissing:
+            return "The destination folder no longer exists. Choose a different folder and try again."
+        case .localFileMissing:
+            return "The original file can\u{2019}t be found. It may have been moved, renamed, or deleted since it was added."
+        case .fileChanged:
+            return "The file was modified while uploading. Re-add it to the queue to upload the latest version."
+        case .fileTooLarge:
+            return "This file is too large for Google Drive. The limit is 5 TB per file. Try compressing or splitting it."
+        case .storageQuotaExceeded:
+            return "Your Google Drive is full. Free up space or upgrade your storage plan, then retry."
+        case .sharedDriveRestriction:
+            return "This Shared Drive doesn\u{2019}t allow uploads from your account. Contact the Shared Drive manager for access."
+        case .unknown:
+            return "Something unexpected happened. Try again \u{2014} it usually resolves on its own."
         }
     }
 }

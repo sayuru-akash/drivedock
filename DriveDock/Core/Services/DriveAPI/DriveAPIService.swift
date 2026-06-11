@@ -108,6 +108,14 @@ final class DriveAPIService {
         resourceTimeout = resource
     }
 
+    private func calculateBackoffDelay(attempt: Int, baseNanoseconds: UInt64) -> UInt64 {
+        let exponential = baseNanoseconds * UInt64(pow(2.0, Double(attempt)))
+        let jitter = UInt64.random(in: 0...1_000_000_000)
+        let total = exponential + jitter
+        let maxDelay: UInt64 = 60_000_000_000
+        return min(total, maxDelay)
+    }
+
     private func executeWithRetry<T>(_ operation: () async throws -> T) async throws -> T {
         var lastError: Error?
         for attempt in 0..<maxRetries {
@@ -119,7 +127,7 @@ final class DriveAPIService {
                 case .httpError(let code, _) where code >= 500:
                     lastError = error
                     if attempt < maxRetries - 1 {
-                        let delay = UInt64(pow(2.0, Double(attempt))) * 500_000_000
+                        let delay = calculateBackoffDelay(attempt: attempt, baseNanoseconds: 500_000_000)
                         try? await Task.sleep(nanoseconds: delay)
                         continue
                     }
@@ -133,7 +141,7 @@ final class DriveAPIService {
                 case .networkUnavailable:
                     lastError = error
                     if attempt < maxRetries - 1 {
-                        let delay = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
+                        let delay = calculateBackoffDelay(attempt: attempt, baseNanoseconds: 1_000_000_000)
                         try? await Task.sleep(nanoseconds: delay)
                         continue
                     }
@@ -147,14 +155,14 @@ final class DriveAPIService {
                 if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
                     lastError = DriveAPIError.timeout
                     if attempt < maxRetries - 1 {
-                        let delay = UInt64(pow(2.0, Double(attempt))) * 500_000_000
+                        let delay = calculateBackoffDelay(attempt: attempt, baseNanoseconds: 500_000_000)
                         try? await Task.sleep(nanoseconds: delay)
                         continue
                     }
                 }
                 if nsError.domain == NSURLErrorDomain && attempt < maxRetries - 1 {
                     lastError = error
-                    let delay = UInt64(pow(2.0, Double(attempt))) * 500_000_000
+                    let delay = calculateBackoffDelay(attempt: attempt, baseNanoseconds: 500_000_000)
                     try? await Task.sleep(nanoseconds: delay)
                     continue
                 }

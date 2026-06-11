@@ -30,6 +30,11 @@ struct QueueItemRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
+                    Text(accountEmail)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+
                     Text(item.destinationFolderName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -62,6 +67,7 @@ struct QueueItemRow: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .help(item.localFilePath)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovering = hovering
@@ -161,10 +167,17 @@ struct QueueItemRow: View {
         return "doc"
     }
 
+    private var accountEmail: String {
+        appState.auth.accounts.first { $0.id == item.accountID }?.email ?? ""
+    }
+
     private var accessibilityDescription: String {
         var parts = [item.localFileName]
         parts.append(item.formattedSize)
         parts.append(item.status.displayName)
+        if !accountEmail.isEmpty {
+            parts.append("Account: \(accountEmail)")
+        }
         if item.status == .uploading {
             parts.append("\(item.progressPercent) percent")
         }
