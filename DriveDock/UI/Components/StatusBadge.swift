@@ -26,16 +26,16 @@ struct StatusBadge: View {
 
     private var backgroundColor: Color {
         switch status {
-        case .preparing: return .orange
+        case .preparing: return .secondary
         case .waiting: return .secondary
-        case .uploading: return .blue
-        case .paused: return .yellow
+        case .uploading: return .accentColor
+        case .paused: return Color(nsColor: .systemOrange)
         case .completed: return .green
         case .failed: return .red
-        case .cancelled: return .gray
-        case .needsAccountReconnect: return .orange
-        case .needsDestinationPermission: return .purple
-        case .skipped: return .gray
+        case .cancelled: return Color(nsColor: .tertiaryLabelColor)
+        case .needsAccountReconnect: return Color(nsColor: .systemOrange)
+        case .needsDestinationPermission: return Color(nsColor: .systemOrange)
+        case .skipped: return Color(nsColor: .tertiaryLabelColor)
         }
     }
 }

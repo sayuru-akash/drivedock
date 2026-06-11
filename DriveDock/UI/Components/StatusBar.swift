@@ -12,6 +12,7 @@ struct StatusBar: View {
             if appState.engine.isProcessing {
                 HStack(spacing: 4) {
                     PulsingDot(color: .green)
+                        .frame(width: 6, height: 6)
                     Text("Uploading")
                         .font(.caption)
                         .foregroundStyle(.secondary)

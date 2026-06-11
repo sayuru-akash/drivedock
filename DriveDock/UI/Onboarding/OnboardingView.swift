@@ -99,7 +99,9 @@ struct WelcomeStep: View {
 
             VStack(spacing: 16) {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 64))
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 64, height: 64)
                     .foregroundStyle(.linearGradient(
                         colors: [.blue, .cyan],
                         startPoint: .top,
@@ -185,7 +187,9 @@ struct ConnectingStep: View {
             } else if let error = authError {
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 40))
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 40, height: 40)
                         .foregroundStyle(.orange)
 
                     Text("Connection Failed")
@@ -230,7 +234,9 @@ struct ReadyStep: View {
 
             VStack(spacing: 16) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 64))
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 64, height: 64)
                     .foregroundStyle(.green)
                     .scaleEffect(isAnimating ? 1.0 : 0.5)
                     .opacity(isAnimating ? 1.0 : 0.0)

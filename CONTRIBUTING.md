@@ -141,9 +141,11 @@ DriveDock/
 │       ├── Auth/           # OAuth flow, Keychain, token management
 │       ├── DriveAPI/       # Google Drive API v3 integration
 │       ├── Upload/         # Upload engine, queue, retry logic
-│       ├── Persistence/    # Local database (SQLite)
+│       ├── Download/       # Download engine, parallel downloads
+│       ├── Persistence/    # JSON file storage in Application Support
 │       ├── Notifications/  # macOS notifications
-│       └── FileAccess/     # Drag-drop, bookmarks, MIME detection
+│       ├── FileAccess/     # Drag-drop, bookmarks, MIME detection
+│       └── NetworkMonitor.swift  # Connectivity monitoring, auto-pause/resume
 ├── UI/
 │   ├── Onboarding/         # First-launch screens
 │   ├── Main/               # Main window layout
@@ -170,7 +172,8 @@ When adding new code, follow this existing structure. If you are unsure where a 
 - **Use SwiftUI for all new views** unless AppKit is genuinely required for functionality that SwiftUI does not support.
 - **Prefer `async/await`** over completion handlers for asynchronous code.
 - **Use `@Observable`** (macOS 14+) over `ObservableObject` where possible. The project targets macOS 14 minimum.
-- **Use actors** for shared mutable state in concurrent code, especially in the upload engine.
+- **Use `@Environment` and `@Bindable`** for state injection. Do not use `@StateObject` or `.environmentObject`.
+- **Use `@MainActor`** for state mutations and `nonisolated` for I/O and network operations to avoid blocking the main thread.
 - **Keep views small and composable.** If a view exceeds ~150 lines, consider extracting subviews.
 - **Use meaningful names.** Variable and function names should clearly describe their purpose.
 
@@ -326,8 +329,15 @@ Unit tests cover core logic without network or UI dependencies:
 - Upload session persistence
 - MIME type detection
 - File size formatting
+- Speed tracking (sliding window calculations)
+- Keychain service operations
+- JSON persistence (thread-safe file I/O with NSLock)
 
-Write unit tests for any new logic you add. Place tests in the `DriveDockTests/` directory, mirroring the main project structure.
+Write unit tests for any new logic you add. Place tests in the `DriveDockTests/` directory, mirroring the main project structure. Existing test files:
+
+- `UploadItemTests`, `UploadBatchTests`, `DriveAccountTests`, `DriveFolderTests`
+- `AppSettingsTests`, `PersistenceServiceTests`, `KeychainServiceTests`
+- `FileDropHandlerTests`, `MIMETypeDetectorTests`, `SpeedTrackerTests`
 
 ### Integration Tests
 

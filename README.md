@@ -44,12 +44,20 @@ DriveDock is packed with features designed for speed, reliability, and a native 
 ### Upload
 
 - **Drag-and-Drop Uploads** -- Drop files or folders directly onto the main window, the menu bar popover, or the Dock icon to start uploading instantly.
+- **Clipboard Paste** -- Paste files from the clipboard with `Cmd+V` to queue them for upload.
 - **Folder Uploads with Structure Preservation** -- Upload entire folder hierarchies and DriveDock recreates the exact structure in Google Drive, including nested subfolders.
-- **Parallel Uploads** -- Upload multiple files simultaneously with adaptive concurrency that adjusts based on network conditions, error rate, and battery state.
-- **Resumable Uploads** -- Large files use Google Drive's resumable upload protocol. If your connection drops or your Mac sleeps, uploads pick up right where they left off.
+- **Parallel Uploads** -- Upload multiple files simultaneously with adaptive concurrency that adjusts based on network conditions, error rate, and HTTP 429 responses.
+- **Resumable Uploads** -- Large files use Google Drive's resumable upload protocol with 8 MB chunks. If your connection drops or your Mac sleeps, uploads pick up right where they left off. Sessions survive app restarts.
 - **Background Uploads** -- Close the main window and DriveDock continues uploading from the menu bar. Progress never stops just because you moved on.
-- **Duplicate Handling** -- Choose how DriveDock handles files with the same name: keep both, rename the new file, skip existing, or replace (advanced).
+- **Duplicate Handling** -- Choose how DriveDock handles files with the same name: keep both, rename the new file, skip existing, or replace.
 - **Batch Upload Intelligence** -- When uploading hundreds of small files, DriveDock caches destination folder IDs, avoids redundant API calls, and processes the queue efficiently.
+- **Bandwidth Limiting** -- Cap upload speed to avoid saturating your connection. Configure in Settings > Network.
+- **Upload Plan Summary** -- Review file count, total size, and destination before starting an upload.
+
+### Downloads
+
+- **Parallel Downloads** -- Download files from Google Drive with parallel transfer support and progress tracking.
+- **Download Queue** -- Download items are tracked with the same queue persistence and status visibility as uploads.
 
 ### Account Management
 
@@ -65,20 +73,25 @@ DriveDock is packed with features designed for speed, reliability, and a native 
 - **Queue Persistence** -- The queue survives app restarts, Mac sleep, and network interruptions. Pending items remain queued; completed items move to history.
 - **Smart Retry with Backoff** -- Failed uploads retry automatically using exponential backoff with jitter. Rate limits reduce concurrency instead of causing repeated failures.
 - **Status Visibility** -- Every queue item shows its state at a glance: preparing, waiting, uploading, paused, completed, failed, cancelled, or needs attention.
+- **Network Monitoring** -- DriveDock detects connectivity changes and pauses uploads on disconnection. It auto-resumes when the network returns. Sleep and wake are handled gracefully.
 
 ### UI
 
 - **Native macOS Design** -- Built entirely with SwiftUI and AppKit where needed. Supports light mode, dark mode, translucent materials, and standard macOS window behaviours.
+- **Accent Colour Customisation** -- Choose from 6 accent colours to personalise the app's appearance.
 - **Menu Bar Helper** -- A persistent menu bar icon shows upload progress, active count, a quick drop zone, and account switching. Optionally hide the Dock icon and run entirely from the menu bar.
 - **Destination Picker** -- Browse My Drive and Shared Drives, search folders, create new folders, and pin recent or favourite destinations.
+- **Drive Browser** -- Full Drive browsing with breadcrumb navigation, Shared Drive support, and folder creation directly from the destination picker.
 - **Upload History** -- Track every upload with timestamps, file size, duration, average speed, destination, account, status, and Drive links.
 - **Completion Summaries** -- After a batch finishes, see a clear report: total files, total size, failed/skipped count, duration, and a button to open the Drive folder.
 - **Export Reports** -- Export upload history as CSV, JSON, or plain text. Useful for agencies, teams, and audit trails.
-- **Native Notifications** -- Get notified when batches complete, errors need attention, or large uploads finish. Fully configurable in Settings.
+- **Native Notifications** -- Get notified when batches complete, errors need attention, or large uploads finish. Notifications include action buttons. Fully configurable in Settings.
 
 ### Security
 
-- **Keychain-Only Credentials** -- All OAuth tokens live in macOS Keychain. DriveDock never writes tokens to disk, logs, or SQLite.
+- **Keychain-Only Credentials** -- All OAuth tokens live in macOS Keychain. DriveDock never writes tokens to disk, logs, or local storage.
+- **Biometric Protection** -- Optionally protect Keychain tokens with Touch ID or Apple Watch authentication.
+- **Security-Scoped Bookmarks** -- Dragged files are accessed via security-scoped bookmarks for proper sandbox compliance.
 - **Minimal OAuth Scopes** -- DriveDock requests only the permissions it genuinely needs. No unnecessary profile or contact scopes.
 - **No Analytics or Tracking** -- Zero telemetry. Zero hidden tracking. Your files and activity stay on your Mac.
 - **Open Source** -- Every line of code is publicly auditable. DriveDock does exactly what it says.
@@ -195,7 +208,8 @@ DriveDock is built with a clean, modular architecture that separates concerns ac
 | **Core/Services/Auth** | OAuth 2.0 flow, token refresh, Keychain storage, multi-account management. |
 | **Core/Services/DriveAPI** | Google Drive API v3 integration: folder listing, creation, file metadata, upload initiation, Shared Drive support, error mapping. |
 | **Core/Services/Upload** | Upload engine, queue scheduler, parallel workers, resumable sessions, pause/resume/cancel, retry/backoff, speed tracking. |
-| **Core/Services/Persistence** | Local database (SQLite) for queue state, upload sessions, history, settings, and account references. |
+| **Core/Services/Download** | Download engine with parallel downloads, progress tracking, and batch management. |
+| **Core/Services/Persistence** | JSON file storage in `~/Library/Application Support/DriveDock/` for queue, batches, history, settings, and destinations. Uses `NSLock` for thread safety. |
 | **Core/Services/Notifications** | macOS native notifications, menu bar status updates, user alerts. |
 | **Core/Services/FileAccess** | Drag-and-drop handling, security-scoped bookmarks, folder scanning, MIME type detection, local file validation. |
 | **UI/Onboarding** | First-launch welcome, account connection, default behaviour setup, ready screen. |
@@ -238,18 +252,23 @@ DriveDock is built with a clean, modular architecture that separates concerns ac
 |  +-------------+  +-------------+  | Retry/Backoff|              |
 |                                     +-------------+               |
 |  +-------------+  +-------------+  +-------------+               |
-|  | Persistence |  | Notifications| | FileAccess  |               |
-|  | SQLite      |  | macOS alerts|  | Drag/Drop   |               |
-|  | Queue state |  | Menu status |  | Bookmarks   |               |
-|  | History     |  |             |  | MIME detect  |               |
+|  | Download    |  | Persistence |  | Notifications|              |
+|  | Parallel    |  | JSON files  |  | macOS alerts |              |
+|  | Progress    |  | NSLock      |  | Menu status  |              |
 |  +-------------+  +-------------+  +-------------+               |
+|  +-------------+  +-------------+                                 |
+|  | FileAccess  |  | NetworkMon  |                                |
+|  | Drag/Drop   |  | Connectivity|                                |
+|  | Bookmarks   |  | Auto-pause  |                                |
+|  | MIME detect  |  +-------------+                                |
+|  +-------------+                                                  |
 +------------------------------------------------------------------+
           |                    |                    |
           v                    v                    v
 +------------------------------------------------------------------+
 |                      Platform Layer                               |
 |  Google Drive API v3 · URLSession · Keychain Services             |
-|  FileManager · UserNotifications · SQLite/GRDB                    |
+|  FileManager · UserNotifications · JSON Persistence               |
 +------------------------------------------------------------------+
 ```
 
@@ -258,12 +277,13 @@ DriveDock is built with a clean, modular architecture that separates concerns ac
 | Pattern | Usage |
 |---------|-------|
 | **MVVM** | Views are bound to view models using `@Observable` (macOS 14+). View models hold state and business logic; views are declarative and composable. |
-| **Repository Pattern** | Data access is abstracted behind repository protocols. Services interact with repositories, not raw SQLite or API clients directly. |
-| **Actor Isolation** | The upload engine uses Swift actors to safely manage concurrent upload workers and shared queue state. |
+| **Singleton Services** | Services are `@Observable` singletons injected via `.environment()` and `@Environment`. State management uses `@Observable` and `@Bindable`, never `@StateObject`. |
+| **Actor Isolation** | The upload engine uses `@MainActor` for state mutations and `nonisolated` methods for I/O and network operations to avoid blocking. |
 | **Dependency Injection** | Services receive their dependencies through initialisers, enabling testability and mock injection in tests. |
 | **Strategy Pattern** | Upload modes (Balanced, Fast, Light) and duplicate handling policies are implemented as interchangeable strategies. |
-| **Observer Pattern** | `@Observable` macro and `NotificationCenter` are used for reactive UI updates and cross-module communication. |
-| **Command Pattern** | Queue actions (pause, resume, cancel, retry) are encapsulated as discrete commands for undo support and queue replay. |
+| **Observer Pattern** | `@Observable` macro and `.onChange(of:)` are used for reactive UI updates and cross-module communication. |
+| **Continuation Bridge** | OAuth callback from local HTTP server bridged to async/await via `CheckedContinuation`. |
+| **Task Deduplication** | Coalesced token refresh prevents concurrent refresh requests for the same account. |
 
 ---
 
@@ -325,22 +345,21 @@ DriveDock is built with a clean, modular architecture that separates concerns ac
 
 | Shortcut | Action |
 |----------|--------|
-| `Cmd+O` | Open file picker |
-| `Cmd+Shift+O` | Open folder picker |
-| `Cmd+V` | Paste files from clipboard |
-| `Cmd+Delete` | Remove selected item from queue |
-| `Cmd+Shift+Delete` | Clear all completed items |
-| `Space` | Quick Look selected item |
-| `Cmd+I` | Toggle inspector panel |
+| `Cmd+N` | New Upload (open destination picker) |
+| `Cmd+O` | Add Files |
+| `Cmd+Shift+O` | Add Folder |
+| `Cmd+P` | Pause All / Resume All |
+| `Cmd+R` | Resume All |
+| `Cmd+Shift+K` | Clear Completed |
+| `Cmd+Option+I` | Toggle Inspector |
 | `Cmd+,` | Open Settings |
-| `Cmd+1` | Switch to Queue view |
-| `Cmd+2` | Switch to History view |
-| `Cmd+3` | Switch to Destinations view |
-| `Cmd+P` | Pause/Resume selected upload |
-| `Cmd+Shift+P` | Pause All / Resume All |
-| `Cmd+R` | Retry selected failed upload |
-| `Cmd+Enter` | Confirm destination and start upload |
-| `Cmd+Shift+A` | Switch account |
+| `Cmd+V` | Paste Files from Clipboard |
+| `Cmd+1` | Show Uploads |
+| `Cmd+2` | Show Queue |
+| `Cmd+3` | Show Active |
+| `Cmd+4` | Show Completed |
+| `Cmd+5` | Show Failed |
+| `Cmd+6` | Show History |
 
 ---
 
@@ -366,6 +385,7 @@ DriveDock offers three upload modes to match your workflow:
 | Show menu bar icon | On | Display the DriveDock icon in the menu bar with progress and controls. |
 | Show Dock icon | On | Show DriveDock in the Dock. Turn off to run entirely from the menu bar. |
 | Theme | System | Choose System, Light, or Dark appearance. |
+| Accent colour | Blue | Choose from 6 accent colours to personalise the app. |
 | Confirm before quitting | On | Ask for confirmation if uploads are active when quitting. |
 
 #### Uploads
@@ -394,7 +414,8 @@ DriveDock offers three upload modes to match your workflow:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Pause on poor network | Off | Automatically pause uploads on metered or hotspot-like connections. |
+| Pause on metered network | Off | Automatically pause uploads on metered or hotspot-like connections. |
+| Bandwidth limit | Unlimited | Cap upload speed in KB/s to avoid saturating your connection. |
 | Retry behaviour | Auto | Number of retries and backoff strategy for failed uploads. |
 
 #### Privacy
@@ -552,7 +573,7 @@ A: Yes. Connect as many Google accounts as you need in Settings > Accounts. When
 
 **Q: Where are my Google credentials stored?**
 
-A: OAuth tokens are stored exclusively in macOS Keychain. DriveDock never writes tokens to plain files, SQLite databases, or logs. When you disconnect an account, the tokens are deleted from Keychain.
+A: OAuth tokens are stored exclusively in macOS Keychain. DriveDock never writes tokens to plain files, local databases, or logs. When you disconnect an account, the tokens are deleted from Keychain.
 
 ### Technical
 

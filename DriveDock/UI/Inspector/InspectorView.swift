@@ -31,7 +31,9 @@ struct ItemInspectorContent: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: item.isFolder ? "folder.fill" : fileIcon)
-                            .font(.title2)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 16, height: 16)
                             .foregroundStyle(item.isFolder ? Color.accentColor : Color.secondary)
                             .accessibilityHidden(true)
                         Text(item.localFileName)
@@ -207,7 +209,9 @@ struct ActionButton: View {
         Button(action: action) {
             HStack {
                 Image(systemName: icon)
-                    .font(.system(size: 11))
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 11, height: 11)
                     .accessibilityHidden(true)
                 Text(title)
                     .font(.subheadline)

@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct DropZoneView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var isDropTargeted: Bool
     @State private var showFilePicker = false
     @State private var showFolderPicker = false
@@ -20,24 +21,31 @@ struct DropZoneView: View {
 
             VStack(spacing: 16) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(isDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
-                        .strokeBorder(
-                            isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.3),
-                            style: StrokeStyle(lineWidth: 2, dash: [8, 4])
-                        )
-                        .frame(width: 360, height: 220)
-                        .scaleEffect(isDropTargeted ? 1.02 : 1.0)
-                        .shadow(color: Color.accentColor.opacity(glowOpacity), radius: isDropTargeted ? 12 : 0)
-                        .animation(.easeInOut(duration: 0.2), value: isDropTargeted)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(isDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
+                        RoundedRectangle(cornerRadius: 20)
+                            .strokeBorder(
+                                isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.3),
+                                style: StrokeStyle(lineWidth: 2, dash: [8, 4])
+                            )
+                    }
+                    .frame(width: 360, height: 220)
+                    .scaleEffect(isDropTargeted ? 1.02 : 1.0)
+                    .shadow(color: Color.accentColor.opacity(glowOpacity), radius: isDropTargeted ? 12 : 0)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isDropTargeted)
 
                     VStack(spacing: 12) {
                         Image(systemName: "arrow.up.doc")
-                            .font(.system(size: 40))
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 40, height: 40)
                             .foregroundStyle(isDropTargeted ? Color.accentColor : Color.secondary)
                             .scaleEffect(isAnimating ? 1.05 : 0.95)
                             .animation(
-                                .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                                reduceMotion ? nil : .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
                                 value: isAnimating
                             )
 
@@ -76,7 +84,9 @@ struct DropZoneView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: selectedDestination != nil ? "folder.fill" : "folder.badge.gearshape")
-                            .font(.system(size: 14))
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 14, height: 14)
                         Text(selectedDestination?.name ?? "Choose Drive Destination")
                             .font(.subheadline)
                         Spacer()
@@ -103,12 +113,12 @@ struct DropZoneView: View {
         .padding(40)
         .onAppear {
             isAnimating = true
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
                 glowOpacity = 0.3
             }
         }
         .onChange(of: isDropTargeted) { _, targeted in
-            withAnimation(.easeInOut(duration: 0.3)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
                 glowOpacity = targeted ? 0.5 : 0.3
             }
         }

@@ -45,7 +45,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 240)
+        .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
     }
 
     private func uploadBadgeCount(for item: SidebarItem) -> Int {
