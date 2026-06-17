@@ -685,6 +685,21 @@ final class DownloadEngine {
     var failedCount: Int { items.filter { $0.status == .failed }.count }
     var pausedCount: Int { items.filter { $0.status == .paused }.count }
 
+    #if DEBUG
+    func replaceWithScreenshotData(items screenshotItems: [DownloadItem], batches screenshotBatches: [DownloadBatch]) {
+        for task in activeTasks.values {
+            task.cancel()
+        }
+        activeTasks.removeAll()
+        speedTrackers.removeAll()
+        items = screenshotItems
+        batches = screenshotBatches
+        isProcessing = screenshotItems.contains { $0.status == .downloading }
+        activeDownloadCount = screenshotItems.filter { $0.status == .downloading }.count
+        updateTotalSpeed()
+    }
+    #endif
+
     // MARK: - Persistence
 
     private func loadPersistedState() {

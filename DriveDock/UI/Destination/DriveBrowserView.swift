@@ -223,6 +223,14 @@ struct DriveBrowserView: View {
         currentFolderID = id
         currentFolderName = name
 
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            items = ScreenshotStaging.sampleDriveFiles
+            isLoading = false
+            return
+        }
+        #endif
+
         do {
             let accessToken = try await appState.auth.getAccessToken(for: accountID)
 
@@ -272,6 +280,17 @@ struct DriveBrowserView: View {
     private func loadSharedDrives() async {
         guard let accountID = appState.auth.activeAccount?.id else { return }
         isLoading = true
+
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            items = [
+                DriveFile(id: "drive-agency", name: "Agency Shared Drive", mimeType: "application/vnd.google-apps.folder", size: nil, parentID: nil, webViewLink: "https://drive.google.com/drive/folders/drive-agency", createdDate: nil, modifiedDate: nil),
+                DriveFile(id: "drive-client", name: "Client Handoff Space", mimeType: "application/vnd.google-apps.folder", size: nil, parentID: nil, webViewLink: "https://drive.google.com/drive/folders/drive-client", createdDate: nil, modifiedDate: nil)
+            ]
+            isLoading = false
+            return
+        }
+        #endif
 
         do {
             let accessToken = try await appState.auth.getAccessToken(for: accountID)
@@ -327,6 +346,14 @@ struct DriveBrowserView: View {
         guard let accountID = appState.auth.activeAccount?.id else { return }
         isLoading = true
 
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            items = ScreenshotStaging.sampleDriveFiles.reversed()
+            isLoading = false
+            return
+        }
+        #endif
+
         do {
             let accessToken = try await appState.auth.getAccessToken(for: accountID)
 
@@ -377,6 +404,14 @@ struct DriveBrowserView: View {
         guard let accountID = appState.auth.activeAccount?.id else { return }
         isLoading = true
 
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            items = Array(ScreenshotStaging.sampleDriveFiles.prefix(3))
+            isLoading = false
+            return
+        }
+        #endif
+
         do {
             let accessToken = try await appState.auth.getAccessToken(for: accountID)
 
@@ -426,6 +461,16 @@ struct DriveBrowserView: View {
         guard !searchText.isEmpty else { return }
         guard let accountID = appState.auth.activeAccount?.id else { return }
         isLoading = true
+
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            items = ScreenshotStaging.sampleDriveFiles.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText)
+            }
+            isLoading = false
+            return
+        }
+        #endif
 
         do {
             let accessToken = try await appState.auth.getAccessToken(for: accountID)

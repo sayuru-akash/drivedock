@@ -930,6 +930,21 @@ final class UploadEngine {
     var failedCount: Int { items.filter { $0.status == .failed }.count }
     var pausedCount: Int { items.filter { $0.status == .paused }.count }
 
+    #if DEBUG
+    func replaceWithScreenshotData(items screenshotItems: [UploadItem], batches screenshotBatches: [UploadBatch]) {
+        for task in activeTasks.values {
+            task.cancel()
+        }
+        activeTasks.removeAll()
+        speedTrackers.removeAll()
+        items = screenshotItems
+        batches = screenshotBatches
+        isProcessing = screenshotItems.contains { $0.status == .uploading }
+        activeUploadCount = screenshotItems.filter { $0.status == .uploading }.count
+        updateTotalSpeed()
+    }
+    #endif
+
     // MARK: - History
 
     private func addToHistory(_ item: UploadItem) {

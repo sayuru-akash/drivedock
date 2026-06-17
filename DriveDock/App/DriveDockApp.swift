@@ -4,14 +4,39 @@ import SwiftUI
 struct DriveDockApp: App {
     @State private var appState = AppState.shared
 
+    #if DEBUG
+    init() {
+        guard ScreenshotStaging.isEnabled else { return }
+
+        fputs("DriveDock screenshot app init\n", stderr)
+        NSApplication.shared.setActivationPolicy(.regular)
+        DispatchQueue.main.async {
+            Task { @MainActor in
+                ScreenshotWindowController.show()
+            }
+        }
+    }
+    #endif
+
     var body: some Scene {
+        standardScenes
+    }
+
+    @SceneBuilder
+    private var standardScenes: some Scene {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(appState)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(
+                    minWidth: minimumWindowSize.width,
+                    minHeight: minimumWindowSize.height
+                )
                 .preferredColorScheme(colorSchemeForTheme(appState.settings.theme))
                 .tint(appState.settings.accentColor == .system ? nil : appState.settings.accentColor.tintColor)
                 .onAppear {
+                    #if DEBUG
+                    ScreenshotStaging.configure(appState)
+                    #endif
                     configureAppearance()
                 }
                 .onOpenURL { url in
@@ -20,7 +45,7 @@ struct DriveDockApp: App {
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: true))
-        .defaultSize(width: 1100, height: 700)
+        .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Upload...") {
@@ -131,6 +156,24 @@ struct DriveDockApp: App {
 
     private func configureAppearance() {
         NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
+    private var minimumWindowSize: CGSize {
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            return ScreenshotStaging.windowSize
+        }
+        #endif
+        return CGSize(width: 900, height: 600)
+    }
+
+    private var defaultWindowSize: CGSize {
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            return ScreenshotStaging.windowSize
+        }
+        #endif
+        return CGSize(width: 1100, height: 700)
     }
 
     private func colorSchemeForTheme(_ theme: AppTheme) -> ColorScheme? {

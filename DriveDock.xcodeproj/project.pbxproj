@@ -65,6 +65,7 @@
 		A10064 /* DownloadLocationPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10064; };
 		A10065 /* DownloadFolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10065; };
 		A10066 /* UploadPlanSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10066; };
+		A10067 /* ScreenshotStaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10067; };
 		AABB00112233445566000002 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB00112233445566000001 /* NetworkMonitor.swift */; };
 /* End PBXBuildFile section */
 
@@ -126,6 +127,7 @@
 		B10064 /* DownloadLocationPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadLocationPicker.swift; sourceTree = "<group>"; };
 		B10065 /* DownloadFolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadFolderManager.swift; sourceTree = "<group>"; };
 		B10066 /* UploadPlanSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadPlanSummaryView.swift; sourceTree = "<group>"; };
+		B10067 /* ScreenshotStaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotStaging.swift; sourceTree = "<group>"; };
 		D10002 /* DriveDockTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DriveDockTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C10002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -198,6 +200,7 @@
 				B10001 /* DriveDockApp.swift */,
 				B10002 /* ContentView.swift */,
 				B10003 /* AppState.swift */,
+				B10067 /* ScreenshotStaging.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -586,6 +589,7 @@
 				A10064 /* DownloadLocationPicker.swift in Sources */,
 				A10065 /* DownloadFolderManager.swift in Sources */,
 				A10066 /* UploadPlanSummaryView.swift in Sources */,
+				A10067 /* ScreenshotStaging.swift in Sources */,
 				AABB00112233445566000002 /* NetworkMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

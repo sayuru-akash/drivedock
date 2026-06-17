@@ -123,16 +123,59 @@ DriveDock is packed with features designed for speed, reliability, and a native 
 ## Screenshots
 
 <p align="center">
-  <em>Screenshots coming soon.</em>
+  <img src="docs/assets/screenshots/main-window.png" alt="DriveDock main upload window" width="900" />
 </p>
 
-| View | Description |
-|------|-------------|
-| **Main Window** | The primary upload interface with drag-and-drop zone, queue list, and status bar. |
-| **Queue View** | Grouped queue showing active, waiting, paused, completed, and failed uploads with progress bars. |
-| **Destination Picker** | Browse My Drive, Shared Drives, search folders, and create new folders before uploading. |
-| **Settings** | General, Upload, Account, Network, Privacy, and Advanced settings panels. |
-| **Menu Bar** | Menu bar popover with upload progress, quick drop zone, account switcher, and controls. |
+**Main Window**
+Primary upload control surface with the sidebar, active batch status, grouped queue rows, and live throughput.
+
+<p align="center">
+  <img src="docs/assets/screenshots/queue.png" alt="DriveDock active upload queue" width="900" />
+</p>
+
+**Queue**
+Focused queue view for active uploads, retryable failures, waiting items, completed files, and per-file progress.
+
+<p align="center">
+  <img src="docs/assets/screenshots/destination-picker.png" alt="DriveDock destination picker" width="720" />
+</p>
+
+**Destination Picker**
+Native folder selection for My Drive, recent destinations, starred folders, and Shared Drives.
+
+<p align="center">
+  <img src="docs/assets/screenshots/downloads.png" alt="DriveDock downloads view" width="900" />
+</p>
+
+**Downloads**
+Download queue with progress, local save paths, pause/resume controls, and completion status.
+
+<p align="center">
+  <img src="docs/assets/screenshots/drive-browser.png" alt="DriveDock Google Drive browser" width="900" />
+</p>
+
+**Drive Browser**
+Browse Drive folders and files, start downloads, create folders, and upload directly into a selected folder.
+
+<p align="center">
+  <img src="docs/assets/screenshots/settings.png" alt="DriveDock settings window" width="760" />
+</p>
+
+**Settings**
+Tabbed preferences for appearance, upload behavior, accounts, network limits, privacy, and advanced options.
+
+<p align="center">
+  <img src="docs/assets/screenshots/menu-bar.png" alt="DriveDock menu bar popover" width="420" />
+</p>
+
+**Menu Bar**
+Compact background uploader status with counts, recent completions, account switching, and a quick drop zone.
+
+To refresh these images from the current app, run:
+
+```bash
+scripts/capture_readme_screenshots.sh
+```
 
 ---
 

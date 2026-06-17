@@ -10,30 +10,34 @@ struct ContentView: View {
             OnboardingView()
                 .transition(.opacity)
         } else {
-            NavigationSplitView {
-                SidebarView()
-            } detail: {
-                DetailView()
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    AccountSelectorButton()
+            appNavigation
+                .sheet(isPresented: $state.showSettings) {
+                    SettingsView()
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        appState.showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 16, height: 16)
-                    }
-                    .accessibilityLabel("Settings")
-                    .help("Open Settings")
-                }
+        }
+    }
+
+    private var appNavigation: some View {
+        NavigationSplitView {
+            SidebarView()
+        } detail: {
+            DetailView()
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                AccountSelectorButton()
             }
-            .sheet(isPresented: $state.showSettings) {
-                SettingsView()
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    appState.showSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 16, height: 16)
+                }
+                .accessibilityLabel("Settings")
+                .help("Open Settings")
             }
         }
     }

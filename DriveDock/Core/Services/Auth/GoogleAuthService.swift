@@ -347,6 +347,13 @@ final class GoogleAuthService {
         }
     }
 
+    #if DEBUG
+    func replaceWithScreenshotAccounts(_ screenshotAccounts: [DriveAccount]) {
+        accounts = screenshotAccounts
+        activeAccount = screenshotAccounts.first { $0.isActive } ?? screenshotAccounts.first
+    }
+    #endif
+
     // MARK: - Private
 
     private func handleOAuthCallback(_ urlString: String) {

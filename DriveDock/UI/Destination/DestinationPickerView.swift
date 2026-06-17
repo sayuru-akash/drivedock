@@ -328,6 +328,14 @@ struct DestinationPickerView: View {
         currentFolderID = id
         currentFolderName = name
 
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            folders = ScreenshotStaging.sampleFolders
+            isLoading = false
+            return
+        }
+        #endif
+
         do {
             let result = try await DriveAPIService.shared.listFolder(
                 folderID: id,
@@ -346,6 +354,15 @@ struct DestinationPickerView: View {
             await loadFolder(id: currentFolderID, name: currentFolderName)
             return
         }
+
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            folders = ScreenshotStaging.sampleFolders.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText)
+            }
+            return
+        }
+        #endif
 
         isLoading = true
         do {
@@ -431,6 +448,18 @@ struct SharedDrivesListView: View {
 
     private func loadSharedDrives() async {
         isLoading = true
+
+        #if DEBUG
+        if ScreenshotStaging.isEnabled {
+            sharedDrives = [
+                SharedDrive(id: "drive-agency", name: "Agency Shared Drive", createdDate: Date().addingTimeInterval(-86400 * 90)),
+                SharedDrive(id: "drive-client", name: "Client Handoff Space", createdDate: Date().addingTimeInterval(-86400 * 45))
+            ]
+            isLoading = false
+            return
+        }
+        #endif
+
         do {
             sharedDrives = try await DriveAPIService.shared.listSharedDrives(accountID: accountID)
         } catch {
