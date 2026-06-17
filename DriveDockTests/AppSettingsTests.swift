@@ -3,7 +3,6 @@ import XCTest
 
 final class AppSettingsTests: XCTestCase {
 
-    private let defaults = UserDefaults.standard
     private let suiteName = "AppSettingsTests"
 
     private var testDefaults: UserDefaults!
@@ -77,7 +76,7 @@ final class AppSettingsTests: XCTestCase {
     // MARK: - Save/Load Roundtrip
 
     func testSaveAndLoadRoundtrip() {
-        let settings = AppSettings.shared
+        let settings = AppSettings(userDefaults: testDefaults)
 
         settings.launchAtLogin = true
         settings.showMenuBarIcon = false
@@ -108,14 +107,7 @@ final class AppSettingsTests: XCTestCase {
     // MARK: - Default Values
 
     func testDefaultValues() {
-        // Reset UserDefaults to test defaults
-        for key in defaults.dictionaryRepresentation().keys {
-            if key.hasPrefix("settings.") {
-                defaults.removeObject(forKey: key)
-            }
-        }
-
-        let settings = AppSettings.shared
+        let settings = AppSettings(userDefaults: testDefaults)
         settings.load()
 
         XCTAssertFalse(settings.launchAtLogin)

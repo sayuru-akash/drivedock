@@ -14,7 +14,7 @@ final class SpeedTrackerTests: XCTestCase {
 
     func testMultipleAddsReturnPositiveSpeed() {
         let tracker = SpeedTracker()
-        tracker.addBytes(1024)
+        _ = tracker.addBytes(1024)
 
         let expectation = XCTestExpectation(description: "Speed measurement")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -27,7 +27,7 @@ final class SpeedTrackerTests: XCTestCase {
 
     func testSpeedReflectsByteRate() {
         let tracker = SpeedTracker()
-        tracker.addBytes(1000)
+        _ = tracker.addBytes(1000)
 
         let expectation = XCTestExpectation(description: "Speed rate check")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -44,7 +44,7 @@ final class SpeedTrackerTests: XCTestCase {
 
     func testOldEntriesExpire() {
         let tracker = SpeedTracker()
-        tracker.addBytes(1000)
+        _ = tracker.addBytes(1000)
 
         let expectation = XCTestExpectation(description: "Window expiry")
         // Wait longer than the 5-second window
@@ -71,7 +71,7 @@ final class SpeedTrackerTests: XCTestCase {
     func testLargeByteValues() {
         let tracker = SpeedTracker()
         let largeBytes: Int64 = 100_000_000 // 100 MB
-        tracker.addBytes(largeBytes)
+        _ = tracker.addBytes(largeBytes)
 
         let expectation = XCTestExpectation(description: "Large values")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {

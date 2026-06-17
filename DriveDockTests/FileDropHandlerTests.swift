@@ -7,6 +7,8 @@ final class FileDropHandlerTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        AppSettings.shared.ignoreHiddenFiles = true
+        AppSettings.shared.ignoreDSStore = true
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("FileDropHandlerTests-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

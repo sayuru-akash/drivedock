@@ -97,7 +97,7 @@ final class DownloadEngine {
         print("[Download] Save path: \(downloadFolder.appendingPathComponent(folderName).path)")
         
         Task {
-            await addFolder(
+            _ = await addFolder(
                 driveFolderID: driveFolderID,
                 folderName: folderName,
                 localDirectory: downloadFolder,

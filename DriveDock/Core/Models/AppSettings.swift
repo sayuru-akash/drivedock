@@ -155,6 +155,8 @@ enum ChunkSizeOption: String, Codable, CaseIterable {
 
 @Observable
 final class AppSettings {
+    private let defaults: UserDefaults
+
     var launchAtLogin: Bool = false
     var showMenuBarIcon: Bool = true
     var showDockIcon: Bool = true
@@ -189,43 +191,25 @@ final class AppSettings {
 
     static let shared = AppSettings()
 
-    private init() {
+    init(userDefaults: UserDefaults = .standard) {
+        self.defaults = userDefaults
         load()
     }
 
     func load() {
-        let defaults = UserDefaults.standard
-        launchAtLogin = defaults.bool(forKey: "settings.launchAtLogin")
-        showMenuBarIcon = defaults.bool(forKey: "settings.showMenuBarIcon")
-        showDockIcon = defaults.bool(forKey: "settings.showDockIcon")
-        if let themeStr = defaults.string(forKey: "settings.theme"),
-           let t = AppTheme(rawValue: themeStr) {
-            theme = t
-        }
-        if let accentStr = defaults.string(forKey: "settings.accentColor"),
-           let a = AccentStyle(rawValue: accentStr) {
-            accentColor = a
-        }
+        launchAtLogin = defaults.object(forKey: "settings.launchAtLogin") as? Bool ?? false
+        showMenuBarIcon = defaults.object(forKey: "settings.showMenuBarIcon") as? Bool ?? true
+        showDockIcon = defaults.object(forKey: "settings.showDockIcon") as? Bool ?? true
+        theme = defaults.string(forKey: "settings.theme").flatMap(AppTheme.init(rawValue:)) ?? .system
+        accentColor = defaults.string(forKey: "settings.accentColor").flatMap(AccentStyle.init(rawValue:)) ?? .system
         confirmQuitWithActiveUploads = defaults.object(forKey: "settings.confirmQuit") as? Bool ?? true
 
-        if let startScreenStr = defaults.string(forKey: "settings.defaultStartScreen"),
-           let s = SidebarItem(rawValue: startScreenStr) {
-            defaultStartScreen = s
-        }
+        defaultStartScreen = defaults.string(forKey: "settings.defaultStartScreen").flatMap(SidebarItem.init(rawValue:)) ?? .uploads
         defaultAccountID = defaults.string(forKey: "settings.defaultAccountID")
 
-        if let modeStr = defaults.string(forKey: "settings.uploadMode"),
-           let m = UploadMode(rawValue: modeStr) {
-            defaultUploadMode = m
-        }
-        if let destStr = defaults.string(forKey: "settings.destinationDefault"),
-           let d = DestinationDefault(rawValue: destStr) {
-            defaultDestination = d
-        }
-        if let dupStr = defaults.string(forKey: "settings.duplicateMode"),
-           let d = DuplicateMode(rawValue: dupStr) {
-            defaultDuplicateMode = d
-        }
+        defaultUploadMode = defaults.string(forKey: "settings.uploadMode").flatMap(UploadMode.init(rawValue:)) ?? .balanced
+        defaultDestination = defaults.string(forKey: "settings.destinationDefault").flatMap(DestinationDefault.init(rawValue:)) ?? .askEveryTime
+        defaultDuplicateMode = defaults.string(forKey: "settings.duplicateMode").flatMap(DuplicateMode.init(rawValue:)) ?? .keepBoth
 
         ignoreHiddenFiles = defaults.object(forKey: "settings.ignoreHidden") as? Bool ?? true
         ignoreDSStore = defaults.object(forKey: "settings.ignoreDSStore") as? Bool ?? true
@@ -236,26 +220,19 @@ final class AppSettings {
         maxActiveUploads = defaults.object(forKey: "settings.maxActiveUploads") as? Int ?? 3
         bandwidthLimitKBps = defaults.object(forKey: "settings.bandwidthLimit") as? Int ?? 0
 
-        if let notifStr = defaults.string(forKey: "settings.notificationPref"),
-           let n = NotificationPreference(rawValue: notifStr) {
-            notificationPreference = n
-        }
+        notificationPreference = defaults.string(forKey: "settings.notificationPref").flatMap(NotificationPreference.init(rawValue:)) ?? .allComplete
         notifyOnErrors = defaults.object(forKey: "settings.notifyErrors") as? Bool ?? true
 
         pauseOnMeteredNetwork = defaults.object(forKey: "settings.pauseOnMetered") as? Bool ?? false
         pauseOnVPNChange = defaults.object(forKey: "settings.pauseOnVPN") as? Bool ?? false
 
-        if let chunkStr = defaults.string(forKey: "settings.chunkSize"),
-           let c = ChunkSizeOption(rawValue: chunkStr) {
-            chunkSize = c
-        }
+        chunkSize = defaults.string(forKey: "settings.chunkSize").flatMap(ChunkSizeOption.init(rawValue:)) ?? .auto
 
         maxRetryCount = defaults.object(forKey: "settings.maxRetry") as? Int ?? 5
-        debugLogsEnabled = defaults.bool(forKey: "settings.debugLogs")
+        debugLogsEnabled = defaults.object(forKey: "settings.debugLogs") as? Bool ?? false
     }
 
     func save() {
-        let defaults = UserDefaults.standard
         defaults.set(launchAtLogin, forKey: "settings.launchAtLogin")
         defaults.set(showMenuBarIcon, forKey: "settings.showMenuBarIcon")
         defaults.set(showDockIcon, forKey: "settings.showDockIcon")

@@ -29,19 +29,9 @@ final class NotificationService {
         Task {
             do {
                 let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
-                await MainActor.run {
-                    self.lock.lock()
-                    self._permissionGranted = granted
-                    self._permissionChecked = true
-                    self.lock.unlock()
-                }
+                self.updatePermission(granted: granted)
             } catch {
-                await MainActor.run {
-                    self.lock.lock()
-                    self._permissionGranted = false
-                    self._permissionChecked = true
-                    self.lock.unlock()
-                }
+                self.updatePermission(granted: false)
             }
         }
     }
@@ -49,11 +39,15 @@ final class NotificationService {
     func checkPermissionStatus() async -> Bool {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         let authorized = settings.authorizationStatus == .authorized
+        updatePermission(granted: authorized)
+        return authorized
+    }
+
+    private func updatePermission(granted: Bool) {
         lock.lock()
-        _permissionGranted = authorized
+        _permissionGranted = granted
         _permissionChecked = true
         lock.unlock()
-        return authorized
     }
 
     func isDoNotDisturbActive() async -> Bool {

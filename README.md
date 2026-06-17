@@ -25,6 +25,7 @@ DriveDock is a native macOS app for uploading files and folders to Google Drive 
 - [Features](#features)
 - [Screenshots](#screenshots)
 - [Getting Started](#getting-started)
+- [Download](#download)
 - [Architecture](#architecture)
 - [Usage](#usage)
 - [Configuration](#configuration)
@@ -34,6 +35,26 @@ DriveDock is a native macOS app for uploading files and folders to Google Drive 
 - [FAQ](#faq)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
+
+---
+
+## Download
+
+Download the latest public build from [GitHub Releases](https://github.com/sayuru-akash/drivedock/releases/latest).
+
+Recommended install:
+
+1. Download `DriveDock-<version>-macOS.dmg`.
+2. Open the DMG.
+3. Drag `DriveDock.app` to Applications.
+4. Launch DriveDock from Applications.
+
+Other install options:
+
+- `DriveDock-<version>-macOS.zip` -- plain zipped app bundle.
+- Source build -- clone the repo, configure Google OAuth credentials, and build in Xcode or with `xcodebuild -scheme DriveDock -configuration Release build`.
+
+Release artifacts are Developer ID signed and Apple notarized when the project signing secrets are configured in GitHub Actions. If those secrets are absent, the workflow still publishes ad-hoc signed DMG/zip artifacts so downloads do not break; macOS may require Control-click > Open on first launch. Users who prefer local trust can build from source with their own signing identity.
 
 ---
 
