@@ -11,6 +11,22 @@ ARTIFACTS_DIR="$BUILD_ROOT/artifacts"
 
 cd "$ROOT_DIR"
 
+CREATED_PLACEHOLDER_SECRETS=0
+if [[ ! -f "$ROOT_DIR/Secrets.xcconfig" ]]; then
+  cat > "$ROOT_DIR/Secrets.xcconfig" <<'EOF'
+GOOGLE_CLIENT_ID =
+GOOGLE_CLIENT_SECRET =
+EOF
+  CREATED_PLACEHOLDER_SECRETS=1
+fi
+
+cleanup() {
+  if [[ "$CREATED_PLACEHOLDER_SECRETS" == "1" ]]; then
+    rm -f "$ROOT_DIR/Secrets.xcconfig"
+  fi
+}
+trap cleanup EXIT
+
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<'USAGE'
 Usage: scripts/package_release.sh [version]
@@ -30,6 +46,9 @@ Environment:
   APPLE_ID                       Apple ID for notarytool.
   APPLE_TEAM_ID                  Apple team ID for notarytool.
   APP_SPECIFIC_PASSWORD          App-specific password for notarytool.
+
+If Secrets.xcconfig is missing, this script creates a temporary empty one so
+open-source packaging works without local OAuth secrets.
 USAGE
   exit 0
 fi

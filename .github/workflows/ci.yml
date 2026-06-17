@@ -14,6 +14,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Create CI xcconfig
+        run: |
+          printf 'GOOGLE_CLIENT_ID =\nGOOGLE_CLIENT_SECRET =\n' > Secrets.xcconfig
+
       - name: Build
         run: xcodebuild -scheme DriveDock -configuration Debug build
 

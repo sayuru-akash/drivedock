@@ -40,6 +40,10 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Create CI xcconfig
+        run: |
+          printf 'GOOGLE_CLIENT_ID =\nGOOGLE_CLIENT_SECRET =\n' > Secrets.xcconfig
+
       - name: Detect signing secrets
         id: signing
         env:
@@ -111,12 +115,25 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.draft }}" == "true" ]]; then
             DRAFT_FLAG="--draft"
           fi
-          gh release create "$TAG" \
-            build/release/artifacts/DriveDock-"$VERSION"-macOS.dmg \
-            build/release/artifacts/DriveDock-"$VERSION"-macOS.dmg.sha256 \
-            build/release/artifacts/DriveDock-"$VERSION"-macOS.zip \
-            build/release/artifacts/DriveDock-"$VERSION"-macOS.zip.sha256 \
-            --title "DriveDock $VERSION" \
-            --notes-file build/release/artifacts/RELEASE_NOTES.md \
-            --target "$GITHUB_SHA" \
-            $DRAFT_FLAG
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              build/release/artifacts/DriveDock-"$VERSION"-macOS.dmg \
+              build/release/artifacts/DriveDock-"$VERSION"-macOS.dmg.sha256 \
+              build/release/artifacts/DriveDock-"$VERSION"-macOS.zip \
+              build/release/artifacts/DriveDock-"$VERSION"-macOS.zip.sha256 \
+              --clobber
+            gh release edit "$TAG" \
+              --title "DriveDock $VERSION" \
+              --notes-file build/release/artifacts/RELEASE_NOTES.md \
+              $DRAFT_FLAG
+          else
+            gh release create "$TAG" \
+              build/release/artifacts/DriveDock-"$VERSION"-macOS.dmg \
+              build/release/artifacts/DriveDock-"$VERSION"-macOS.dmg.sha256 \
+              build/release/artifacts/DriveDock-"$VERSION"-macOS.zip \
+              build/release/artifacts/DriveDock-"$VERSION"-macOS.zip.sha256 \
+              --title "DriveDock $VERSION" \
+              --notes-file build/release/artifacts/RELEASE_NOTES.md \
+              --target "$GITHUB_SHA" \
+              $DRAFT_FLAG
+          fi
