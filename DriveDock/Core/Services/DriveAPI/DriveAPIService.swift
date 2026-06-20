@@ -6,6 +6,7 @@ enum DriveAPIError: LocalizedError {
     case quotaExceeded
     case rateLimited(retryAfter: TimeInterval?)
     case permissionDenied
+    case insufficientScopes
     case notFound
     case authenticationRequired
     case networkUnavailable
@@ -18,6 +19,7 @@ enum DriveAPIError: LocalizedError {
         case .quotaExceeded: return "Google Drive storage quota exceeded"
         case .rateLimited: return "Too many requests. Please wait."
         case .permissionDenied: return "Permission denied"
+        case .insufficientScopes: return "Google Drive access is missing required permissions. Reconnect this account."
         case .notFound: return "File or folder not found"
         case .authenticationRequired: return "Authentication required"
         case .networkUnavailable: return "Network unavailable"
@@ -770,6 +772,10 @@ final class DriveAPIService {
         case 403:
             if errorMessage?.contains("quota") == true || errorMessage?.contains("storage") == true {
                 throw DriveAPIError.quotaExceeded
+            }
+            if errorMessage?.localizedCaseInsensitiveContains("insufficient") == true,
+               errorMessage?.localizedCaseInsensitiveContains("scope") == true {
+                throw DriveAPIError.insufficientScopes
             }
             throw DriveAPIError.permissionDenied
         case 404:

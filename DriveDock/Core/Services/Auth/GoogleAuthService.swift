@@ -192,7 +192,8 @@ final class GoogleAuthService {
     private let redirectURI = "http://127.0.0.1:18923/oauth2callback"
 
     private let scopes = [
-        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.readonly",
         "https://www.googleapis.com/auth/userinfo.email",
         "https://www.googleapis.com/auth/userinfo.profile"
     ]
@@ -210,8 +211,14 @@ final class GoogleAuthService {
     private let refreshLock = NSLock()
 
     private init() {
-        self.clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String ?? ""
-        self.clientSecret = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_SECRET") as? String ?? ""
+        self.clientID = Self.configurationValue(
+            primaryKey: "GOOGLE_CLIENT_ID",
+            aliases: ["GOOGLE_OAUTH_CLIENT_ID"]
+        )
+        self.clientSecret = Self.configurationValue(
+            primaryKey: "GOOGLE_CLIENT_SECRET",
+            aliases: ["GOOGLE_OAUTH_CLIENT_SECRET"]
+        )
         loadAccounts()
     }
 
@@ -220,6 +227,12 @@ final class GoogleAuthService {
     func startAuthentication() async throws {
         isAuthenticating = true
         authError = nil
+
+        guard !clientID.isEmpty else {
+            isAuthenticating = false
+            authError = AuthError.missingClientID.localizedDescription
+            throw AuthError.missingClientID
+        }
 
         codeVerifier = generateCodeVerifier()
         guard let verifier = codeVerifier else {
@@ -457,7 +470,7 @@ final class GoogleAuthService {
             "grant_type": "authorization_code",
             "code_verifier": codeVerifier
         ]
-        request.httpBody = body.map { "\($0.key)=\($0.value)" }.joined(separator: "&").data(using: .utf8)
+        request.httpBody = Self.formURLEncodedBody(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -503,7 +516,7 @@ final class GoogleAuthService {
             "client_secret": clientSecret,
             "grant_type": "refresh_token"
         ]
-        request.httpBody = body.map { "\($0.key)=\($0.value)" }.joined(separator: "&").data(using: .utf8)
+        request.httpBody = Self.formURLEncodedBody(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -548,6 +561,41 @@ final class GoogleAuthService {
     private func extractOAuthError(from data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return json["error_description"] as? String ?? json["error"] as? String
+    }
+
+    private static func configurationValue(primaryKey: String, aliases: [String]) -> String {
+        for key in [primaryKey] + aliases {
+            if let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+               let normalized = normalizedConfigurationValue(value) {
+                return normalized
+            }
+
+            if let value = ProcessInfo.processInfo.environment[key],
+               let normalized = normalizedConfigurationValue(value) {
+                return normalized
+            }
+        }
+
+        return ""
+    }
+
+    private static func normalizedConfigurationValue(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.hasPrefix("$("),
+              trimmed != "YOUR_CLIENT_ID_HERE",
+              trimmed != "YOUR_CLIENT_SECRET_HERE" else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func formURLEncodedBody(_ values: [String: String]) -> Data? {
+        var components = URLComponents()
+        components.queryItems = values.map { key, value in
+            URLQueryItem(name: key, value: value)
+        }
+        return components.percentEncodedQuery?.data(using: .utf8)
     }
 
     private func saveTokens(accountID: String, response: OAuthTokenResponse) throws {
@@ -596,6 +644,7 @@ enum AuthError: LocalizedError {
     case codeVerifierGenerationFailed, invalidAuthURL, invalidCallback, noCodeVerifier
     case noToken, tokenDecodingFailed, tokenExpired, tokenExchangeFailed
     case tokenRefreshFailed, userInfoFailed, userCancelled, serverStartFailed
+    case missingClientID
 
     var errorDescription: String? {
         switch self {
@@ -611,6 +660,7 @@ enum AuthError: LocalizedError {
         case .userInfoFailed: return "Failed to fetch account info"
         case .userCancelled: return "Authentication was cancelled"
         case .serverStartFailed: return "Failed to start local server on port 18923. Is another instance running?"
+        case .missingClientID: return "Google OAuth client ID is not configured. Set GOOGLE_CLIENT_ID in Secrets.xcconfig and rebuild DriveDock."
         }
     }
 }

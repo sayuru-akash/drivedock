@@ -881,6 +881,7 @@ final class UploadEngine {
             case .networkUnavailable: return .network
             case .rateLimited: return .quotaRateLimit
             case .authenticationRequired: return .authentication
+            case .insufficientScopes: return .authentication
             case .permissionDenied: return .permission
             case .notFound: return .destinationMissing
             case .quotaExceeded: return .storageQuotaExceeded

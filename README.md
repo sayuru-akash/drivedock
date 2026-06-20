@@ -212,6 +212,7 @@ DriveDock uses the Google Drive API with OAuth 2.0 authentication. You need to c
    - Select **External** user type (for development/testing)
    - Fill in the app name (`DriveDock`), user support email, and developer contact email
    - Add the scope `https://www.googleapis.com/auth/drive.file` (upload files created by the app)
+   - Add the scope `https://www.googleapis.com/auth/drive.readonly` (browse existing Drive files and folders)
    - Add your email as a test user while the app is in development
 
 5. **Create OAuth 2.0 credentials**:
@@ -222,9 +223,11 @@ DriveDock uses the Google Drive API with OAuth 2.0 authentication. You need to c
    - Click **Create**
    - Copy the **Client ID** (you will need this)
 
-6. **Configure the Client ID in DriveDock**:
-   - In Xcode, set the `GOOGLE_OAUTH_CLIENT_ID` build setting or environment variable to your Client ID
-   - Alternatively, add it to your local `xcconfig` file (do not commit this file)
+6. **Configure the OAuth credentials in DriveDock**:
+   - Run `scripts/setup.sh`, then edit `Secrets.xcconfig`
+   - Set `GOOGLE_CLIENT_ID` to your OAuth desktop Client ID
+   - Set `GOOGLE_CLIENT_SECRET` to your OAuth desktop Client Secret
+   - Do not commit `Secrets.xcconfig`
 
 ### Step 2: Clone the Repository
 
@@ -497,7 +500,9 @@ For development builds, you can configure DriveDock using environment variables 
 
 | Variable | Description |
 |----------|-------------|
-| `GOOGLE_OAUTH_CLIENT_ID` | Your Google OAuth 2.0 client ID. Required for development builds. |
+| `GOOGLE_CLIENT_ID` | Your Google OAuth 2.0 desktop client ID. Required for login. |
+| `GOOGLE_CLIENT_SECRET` | Your Google OAuth 2.0 desktop client secret. |
+| `GOOGLE_OAUTH_CLIENT_ID` | Legacy alias for `GOOGLE_CLIENT_ID`; supported for Xcode scheme environment overrides. |
 | `DRIVEDOCK_DEBUG_LOGS` | Set to `1` to enable verbose debug logging. |
 | `DRIVEDOCK_MAX_CONCURRENCY` | Override the maximum number of concurrent uploads (integer). |
 
