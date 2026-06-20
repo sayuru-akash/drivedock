@@ -170,8 +170,11 @@ hdiutil create \
   -format UDZO \
   "$DMG_PATH"
 
-/usr/bin/shasum -a 256 "$ZIP_PATH" > "$ZIP_CHECKSUM_PATH"
-/usr/bin/shasum -a 256 "$DMG_PATH" > "$DMG_CHECKSUM_PATH"
+(
+  cd "$ARTIFACTS_DIR"
+  /usr/bin/shasum -a 256 "$(basename "$ZIP_PATH")" > "$(basename "$ZIP_CHECKSUM_PATH")"
+  /usr/bin/shasum -a 256 "$(basename "$DMG_PATH")" > "$(basename "$DMG_CHECKSUM_PATH")"
+)
 
 cat > "$RELEASE_NOTES_PATH" <<EOF
 # DriveDock $VERSION

@@ -40,9 +40,17 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Create CI xcconfig
+      - name: Create release xcconfig
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
-          printf 'GOOGLE_CLIENT_ID =\nGOOGLE_CLIENT_SECRET =\n' > Secrets.xcconfig
+          : "${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID repository secret is required for release builds}"
+          : "${GOOGLE_CLIENT_SECRET:?GOOGLE_CLIENT_SECRET repository secret is required for release builds}"
+          {
+            printf 'GOOGLE_CLIENT_ID = %s\n' "$GOOGLE_CLIENT_ID"
+            printf 'GOOGLE_CLIENT_SECRET = %s\n' "$GOOGLE_CLIENT_SECRET"
+          } > Secrets.xcconfig
 
       - name: Detect signing secrets
         id: signing
